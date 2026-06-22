@@ -1,0 +1,39 @@
+name: Bellwether morning run
+
+# Proves the loop runs unattended: regenerate the day's forecast snapshot and
+# (optionally) post the top demand alert to Slack — no human in the middle.
+on:
+  schedule:
+    - cron: "30 11 * * *" # 11:30 UTC daily (~ pre-US-morning)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  morning-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Refresh forecast snapshot + compute headline alert
+        env:
+          # Add SLACK_WEBHOOK_URL as a repo secret to enable the live Slack push.
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: python scripts/morning_run.py
+
+      - name: Commit refreshed snapshot
+        run: |
+          git config user.name "bellwether-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/forecast_snapshot.json
+          if git diff --cached --quiet; then
+            echo "No snapshot change."
+          else
+            git commit -m "chore: refresh forecast snapshot ($(date -u +%F))"
+            git push
+          fi
