@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bellwether — a weather map, but the fronts are demand</title>
+    <meta name="description" content="Bellwether projects where consumer demand is about to depart from normal across a brand's markets, finds where media money isn't following, and pushes the fix — before the weather arrives." />
+    <style>
+      :root {
+        --accent: #e4572e;
+        --ink: #18202e;
+        --muted: #5a6473;
+        --line: #e4e7ec;
+        --bg: #f3f5f8;
+        --card: #ffffff;
+        --warm: #e4572e;
+        --cool: #2e86ab;
+        --font: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        font-family: var(--font);
+        color: var(--ink);
+        background: radial-gradient(120% 120% at 50% 0%, #fbfcfe 0%, var(--bg) 60%);
+        display: flex; flex-direction: column; min-height: 100vh;
+      }
+
+      /* ---- header ---- */
+      header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 14px 22px; gap: 16px; flex-wrap: wrap;
+      }
+      .brand { display: flex; align-items: baseline; gap: 12px; }
+      .brand h1 { font-size: 22px; margin: 0; letter-spacing: -0.5px; }
+      .brand .logo { font-size: 22px; }
+      .brand .tag { color: var(--muted); font-size: 13px; }
+      #tabs { display: flex; gap: 8px; }
+      #tabs button {
+        font: inherit; font-weight: 600; font-size: 14px;
+        border: 1.5px solid var(--line); background: var(--card);
+        padding: 9px 16px; border-radius: 999px; cursor: pointer;
+        display: flex; align-items: center; gap: 8px; color: var(--muted);
+        transition: all .15s;
+      }
+      #tabs button .ti { font-size: 16px; }
+      #tabs button.active {
+        border-color: var(--accent); color: var(--ink);
+        background: color-mix(in oklch, var(--accent) 12%, white);
+        box-shadow: 0 1px 8px color-mix(in oklch, var(--accent) 22%, transparent);
+      }
+
+      /* ---- stage ---- */
+      main { flex: 1; display: flex; justify-content: center; padding: 0 16px 8px; }
+      .stage {
+        position: relative; width: min(1040px, 100%);
+        background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+        box-shadow: 0 12px 40px rgba(20,30,50,.07); overflow: hidden;
+      }
+      #map { display: block; width: 100%; height: auto; background:
+        linear-gradient(180deg, #eef3f8 0%, #e9eef4 100%); }
+
+      .title {
+        position: absolute; top: 16px; left: 20px; max-width: 70%;
+        font-size: 20px; font-weight: 600; line-height: 1.2;
+        text-shadow: 0 1px 10px rgba(255,255,255,.9); pointer-events: none;
+      }
+      .title b { font-weight: 800; }
+      .title .sub { display: block; font-size: 13px; font-weight: 500; color: var(--muted); margin-top: 3px; }
+
+      .badge {
+        position: absolute; top: 18px; right: 18px; font-size: 11px; font-weight: 700;
+        letter-spacing: .4px; padding: 4px 9px; border-radius: 999px;
+        background: rgba(255,255,255,.85); border: 1px solid var(--line);
+      }
+      .badge.live { color: #157347; }
+      .badge.snapshot { color: #b07000; }
+
+      /* headline alert chip */
+      #alert {
+        position: absolute; left: 20px; bottom: 18px; right: 20px;
+        display: flex; align-items: center; gap: 12px; cursor: pointer;
+        background: rgba(255,255,255,.94); backdrop-filter: blur(4px);
+        border: 1px solid var(--line); border-left: 5px solid var(--accent);
+        border-radius: 12px; padding: 12px 16px;
+        box-shadow: 0 6px 22px rgba(20,30,50,.12); transition: transform .12s;
+      }
+      #alert:hover { transform: translateY(-1px); }
+      #alert .ico { font-size: 20px; }
+      #alert .atext { flex: 1; font-size: 14px; line-height: 1.35; }
+      #alert .cta { font-weight: 700; color: var(--accent); white-space: nowrap; }
+
+      /* ---- scrubber ---- */
+      .scrub-bar {
+        display: flex; align-items: center; gap: 14px;
+        width: min(1040px, 100%); margin: 10px auto 0; padding: 6px 6px 0;
+        flex-wrap: wrap;
+      }
+      #play {
+        font-size: 15px; width: 42px; height: 42px; border-radius: 50%;
+        border: none; background: var(--accent); color: #fff; cursor: pointer;
+        box-shadow: 0 3px 12px color-mix(in oklch, var(--accent) 40%, transparent);
+      }
+      #scrub { flex: 1; min-width: 180px; accent-color: var(--accent); height: 6px; }
+      .scrub-bar .right { display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--muted); }
+      .cb { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+      #details {
+        font: inherit; font-weight: 600; font-size: 13px; border: 1.5px solid var(--line);
+        background: var(--card); padding: 8px 14px; border-radius: 10px; cursor: pointer; color: var(--ink);
+      }
+
+      /* ---- footer ---- */
+      footer { text-align: center; color: var(--muted); font-size: 12px; padding: 14px; }
+      footer a { color: var(--muted); }
+
+      /* ---- drawer ---- */
+      #drawer {
+        position: fixed; top: 0; right: 0; height: 100%; width: min(480px, 100%);
+        background: var(--card); box-shadow: -12px 0 40px rgba(20,30,50,.18);
+        transform: translateX(102%); transition: transform .28s cubic-bezier(.4,0,.2,1);
+        display: flex; flex-direction: column; z-index: 30;
+      }
+      #drawer.open { transform: none; }
+      .drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+      .drawer-head h2 { margin: 0; font-size: 17px; }
+      #drawerClose { border: none; background: none; font-size: 22px; cursor: pointer; color: var(--muted); }
+      .drawer-body { overflow-y: auto; padding: 6px 20px 24px; }
+
+      .panel { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 14px 0; }
+      .panel h3.ptitle { margin: 0 0 8px; font-size: 12px; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); }
+
+      .brief h2 { font-size: 18px; margin: 6px 0 2px; }
+      .brief h3 { font-size: 14px; margin: 14px 0 4px; color: var(--accent); text-transform: uppercase; letter-spacing: .4px; }
+      .brief p { margin: 5px 0; font-size: 14px; line-height: 1.5; }
+      .brief ul { margin: 5px 0; padding-left: 18px; font-size: 14px; }
+      .brief hr { border: none; border-top: 1px solid var(--line); margin: 12px 0; }
+      .brief em { color: var(--muted); font-style: italic; font-size: 12px; }
+
+      .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+      .actions button {
+        font: inherit; font-weight: 600; font-size: 13px; padding: 9px 14px;
+        border-radius: 10px; cursor: pointer; border: 1.5px solid var(--line); background: var(--card); color: var(--ink);
+      }
+      #fire { background: var(--accent); color: #fff; border-color: var(--accent); }
+      #fire:disabled { opacity: .6; }
+      #actionStatus { font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 16px; }
+
+      table.realloc { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+      table.realloc th { text-align: left; color: var(--muted); font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+      table.realloc td { padding: 5px 6px; border-bottom: 1px solid #f1f3f6; }
+      table.realloc td.num { text-align: right; font-variant-numeric: tabular-nums; }
+      .pos { color: #157347; font-weight: 600; } .neg { color: #c0392b; font-weight: 600; }
+      .move { font-size: 14px; margin: 2px 0 4px; }
+      .pill { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; letter-spacing: .3px; }
+      .pill.in { background: #fde8e1; color: #b2421f; }
+      .pill.out { background: #e1eef6; color: #1f6593; }
+      .pill.flat { background: #eef0f3; color: #6b7280; }
+
+      #scatter { width: 100%; height: auto; }
+      .note { font-size: 11.5px; color: var(--muted); line-height: 1.45; margin-top: 8px; }
+
+      /* boot overlay */
+      #boot {
+        position: fixed; inset: 0; background: var(--bg); z-index: 50;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 15px; color: var(--muted); gap: 10px;
+      }
+      #boot::before { content: "🌡️"; font-size: 22px; animation: pulse 1.2s infinite; }
+      @keyframes pulse { 0%,100% { opacity: .4 } 50% { opacity: 1 } }
+
+      @media (max-width: 620px) {
+        .title { font-size: 16px; max-width: 62%; }
+        #alert .atext { font-size: 12.5px; }
+        .brand .tag { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="boot">Starting Bellwether…</div>
+
+    <header>
+      <div class="brand">
+        <span class="logo">🌦️</span>
+        <h1>Bellwether</h1>
+        <span class="tag">a weather map, but the fronts are demand</span>
+      </div>
+      <nav id="tabs"></nav>
+    </header>
+
+    <main>
+      <div class="stage">
+        <svg id="map" viewBox="0 0 960 600"></svg>
+        <div class="title" id="title"></div>
+        <div class="badge" id="source-badge">…</div>
+        <div id="alert"></div>
+      </div>
+    </main>
+
+    <div class="scrub-bar">
+      <button id="play" title="Play the week">▶</button>
+      <input id="scrub" type="range" min="0" max="6" value="0" step="0.01" />
+      <div class="right">
+        <label class="cb"><input type="checkbox" id="cbToggle" /> Colourblind</label>
+        <button id="details">Details ↗</button>
+      </div>
+    </div>
+
+    <footer>
+      Weather data by <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo.com</a>
+      · Demand proxy: <a href="https://wikimedia.org/api/rest_v1/" target="_blank" rel="noopener">Wikimedia Pageviews</a>
+      · Bellwether acts three days before the weather arrives.
+    </footer>
+
+    <!-- diagnosis + action drawer (one tap down) -->
+    <aside id="drawer">
+      <div class="drawer-head">
+        <h2>Alert · diagnosis · action</h2>
+        <button id="drawerClose" title="Close">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="panel">
+          <h3 class="ptitle">The reallocation</h3>
+          <div id="realloc"></div>
+        </div>
+        <div class="panel">
+          <h3 class="ptitle">Take the action</h3>
+          <div class="actions">
+            <button id="fire">⚡ Fire alert to buyer</button>
+            <button id="copy">Copy brief</button>
+            <button id="download">Download .md</button>
+          </div>
+          <div id="actionStatus"></div>
+        </div>
+        <div class="panel">
+          <h3 class="ptitle">Evidence · why we believe the projection</h3>
+          <svg id="scatter" viewBox="0 0 360 240"></svg>
+          <div class="note" id="evidenceNote"></div>
+        </div>
+        <div class="panel brief">
+          <h3 class="ptitle">Strategist brief</h3>
+          <div id="briefBody"></div>
+        </div>
+      </div>
+    </aside>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
