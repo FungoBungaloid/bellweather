@@ -1,12 +1,12 @@
 // main.js — orchestration: load data -> fetch forecast -> render map -> diagnose -> act.
 // Drives the broadcast UI: day strip, scrolling ticker, auto-cycling right rail.
-import { CONFIG, DOW, DOW_LONG } from "./config.js";
-import { fetchForecast } from "./forecast.js";
-import { demandField, weekFields } from "./model.js";
-import { diagnose, pickHeadlineDay } from "./diagnose.js";
-import { buildBrief, fireAction, headlineText, usd, pct } from "./action.js";
-import { IsobarMap } from "./isobars.js";
-import { md, renderScatter, reallocTable, tickerHTML, railCardHTML } from "./ui.js";
+import { CONFIG, DOW, DOW_LONG } from "./config.js?v=2";
+import { fetchForecast } from "./forecast.js?v=2";
+import { demandField, weekFields } from "./model.js?v=2";
+import { diagnose, pickHeadlineDay } from "./diagnose.js?v=2";
+import { buildBrief, fireAction, headlineText, usd, pct } from "./action.js?v=2";
+import { IsobarMap } from "./isobars.js?v=2";
+import { md, renderScatter, reallocTable, tickerHTML, railCardHTML } from "./ui.js?v=2";
 
 const $ = (id) => document.getElementById(id);
 

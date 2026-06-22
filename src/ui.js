@@ -1,7 +1,7 @@
 // ui.js — progressive-disclosure widgets: evidence scatter, reallocation table,
 // drawer, and a tiny markdown renderer for the brief.
-import { d3 } from "../vendor/libs.js";
-import { usd, pct } from "./action.js";
+import { d3 } from "../vendor/libs.js?v=2";
+import { usd, pct } from "./action.js?v=2";
 
 // --- tiny, safe-enough markdown (headings, bold, italics, lists, hr) ---
 export function md(src) {

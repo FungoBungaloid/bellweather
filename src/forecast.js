@@ -1,6 +1,6 @@
 // forecast.js — live, batched, keyless Open-Meteo forecast fetch (browser-side).
 // Falls back to a cached snapshot so the demo never shows a blank map.
-import { CONFIG } from "./config.js";
+import { CONFIG } from "./config.js?v=2";
 
 // Returns { source, dates:[ISO...], byMetro: { id: { tmax:[], precip:[] } } }
 export async function fetchForecast(metros) {
