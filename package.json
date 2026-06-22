@@ -1,0 +1,17 @@
+{
+  "name": "bellwether",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A weather map, but the fronts are demand.",
+  "scripts": {
+    "vendor": "npm i && cp node_modules/us-atlas/states-10m.json data/states-10m.json && node build/bundle.mjs",
+    "serve": "python3 -m http.server 8000"
+  },
+  "comment": "Build-time only. The app itself ships vendor/libs.js + data/states-10m.json and needs nothing from npm at runtime. Run `npm run vendor` to regenerate them.",
+  "devDependencies": {
+    "d3": "^7.9.0",
+    "esbuild": "^0.21.5",
+    "topojson-client": "^3.1.0",
+    "us-atlas": "^3.0.1"
+  }
+}

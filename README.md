@@ -36,10 +36,16 @@ python3 -m http.server 8000
 
 Open **http://localhost:8000**. That's it.
 
-> The page loads `d3` and the US basemap from a CDN at runtime, so the demo
-> machine needs internet (it does anyway — it's fetching the live forecast).
-> If the live forecast call ever fails, the app falls back to
-> `data/forecast_snapshot.json` so the map is never blank.
+> **Fully self-contained.** `d3`, `topojson`, and the US basemap are **vendored
+> locally** (`vendor/libs.js`, `data/states-10m.json`) — no CDN, no npm needed at
+> runtime. The only network call is the **live forecast**; if it fails (or you're
+> offline), the app falls back to `data/forecast_snapshot.json` so the map is
+> never blank. The header badge shows **● LIVE FORECAST** or **● CACHED SNAPSHOT**
+> so you always know which you're seeing.
+
+It's built as a **broadcast weather forecast**: a fullscreen dark map (⤢ button for
+true fullscreen), a scrolling reallocation **ticker** along the bottom, an
+auto-cycling **right rail** of the biggest moves, and an animated day strip.
 
 ---
 
@@ -126,11 +132,37 @@ manually with **Actions → Bellwether morning run → Run workflow**.
 
 ---
 
+## Rebuilding the vendored libraries (rarely needed)
+
+The repo already ships `vendor/libs.js` and `data/states-10m.json`. To regenerate
+them (e.g. to bump d3):
+
+```bash
+npm run vendor    # installs build deps, copies the basemap, re-bundles d3+topojson
+```
+
+These are **build-time only** — the app needs nothing from npm to run.
+
+## "Is the data real?"
+
+Straight answer, because it matters for the demo:
+
+- **Forecast** — real and live from Open-Meteo (CC BY 4.0) whenever the browser
+  has internet; otherwise the cached snapshot. The badge tells you which.
+- **Climatological normals & elasticities** — the committed files are **realistic
+  seed values**. Run `python scripts/calibrate.py` to replace them with values
+  calibrated on real ERA5 history + Wikipedia pageviews (then the anomalies and the
+  r² evidence panel are fully real). The app states this honestly in-app.
+- **Media plan & buyers** — a fictional brand, deliberately mis-aligned with summer
+  weather so the gaps are real to surface.
+
 ## Project structure
 
 ```
 bellwether/
-├── index.html              # single-page app shell + styling
+├── index.html              # single-page broadcast app shell + styling
+├── vendor/libs.js          # bundled d3 + topojson (no CDN at runtime)
+├── build/                  # esbuild entry + bundle script for vendor/libs.js
 ├── src/
 │   ├── config.js           # all dials (budget, thresholds, Slack URL, endpoints)
 │   ├── main.js             # orchestration: load → fetch → render → diagnose → act
@@ -140,13 +172,14 @@ bellwether/
 │   ├── isobars.js          # d3-contour + geoAlbersUsa rendering + animation
 │   ├── diagnose.js         # opportunity scoring + ranking
 │   ├── action.js           # brief template + Slack/mailto
-│   └── ui.js               # evidence scatter, reallocation table, drawer, markdown
+│   └── ui.js               # ticker, rail card, evidence scatter, reallocation table, markdown
 ├── data/
 │   ├── metros.json         # ~40 US metros (lat/lon/population)
 │   ├── media_plan.json     # current spend weights + named buyer per metro
 │   ├── categories.json     # portfolio definitions + creative angles
 │   ├── coefficients.json   # elasticity, r², scatter   (seed; calibrate.py overwrites)
 │   ├── normals.json        # climatological normals     (seed; calibrate.py overwrites)
+│   ├── states-10m.json     # vendored US states basemap (lower 48)
 │   └── forecast_snapshot.json  # graceful-failure cache (morning_run.py refreshes)
 ├── scripts/
 │   ├── calibrate.py        # BUILD-TIME: Wikipedia + ERA5 → coefficients/normals
