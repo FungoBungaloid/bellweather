@@ -27,8 +27,8 @@ export const CONFIG = {
   // Public app URL used in the Slack/email deep link (set after you deploy).
   appUrl: "https://your-org.github.io/bellwether/",
 
-  // CDN basemap (states TopoJSON). Demo machines have internet; documented.
-  statesTopoUrl: "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json",
+  // Local basemap (states TopoJSON) — vendored, no CDN dependency.
+  statesTopoUrl: "./data/states-10m.json",
 
   // Live forecast endpoint (keyless, CORS-OK).
   forecastEndpoint: "https://api.open-meteo.com/v1/forecast",

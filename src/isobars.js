@@ -1,11 +1,17 @@
 // isobars.js — the showpiece. A TV-weather map whose fronts are demand.
 // d3-contour over an IDW grid, drawn on a geoAlbersUsa states basemap.
-import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
-import * as topojson from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
+import { d3, topojson } from "../vendor/libs.js";
 import { CONFIG } from "./config.js";
 import { idwGrid } from "./interpolate.js";
 
-const MAX = Math.max(...CONFIG.thresholds.map(Math.abs)); // 40
+const FRACS = [0.13, 0.22, 0.34, 0.5, 0.72, 1.0]; // band edges as fraction of scale max
+
+// Symmetric thresholds + front edge derived from a data-driven scale max.
+function scaleThresholds(M) {
+  const neg = FRACS.map((f) => -M * f).reverse();
+  const pos = FRACS.map((f) => M * f);
+  return { thresholds: [...neg, ...pos], front: M * FRACS[0] };
+}
 
 // Diverging ramps: blue (demand below normal) -> cream (normal) -> red (surge).
 const RAMP_DEFAULT = d3.interpolateRgbBasis([
@@ -22,13 +28,25 @@ export class IsobarMap {
     this.W = CONFIG.mapWidth;
     this.H = CONFIG.mapHeight;
     this.colorblind = false;
+    this.setScale(15); // sensible default until a category sets its own
+  }
+
+  // Tune the colour domain + contour bands to the data's actual range so the
+  // map saturates instead of washing out near zero.
+  setScale(maxAbs) {
+    this.colorMax = Math.max(4, maxAbs);
+    const { thresholds, front } = scaleThresholds(this.colorMax);
+    this.thresholds = thresholds;
+    this.frontThreshold = front;
+    if (this._lastField) this.render(this._lastField);
   }
 
   ramp() {
     return this.colorblind ? RAMP_CB : RAMP_DEFAULT;
   }
   color(v) {
-    const t = (Math.max(-MAX, Math.min(MAX, v)) + MAX) / (2 * MAX);
+    const M = this.colorMax;
+    const t = (Math.max(-M, Math.min(M, v)) + M) / (2 * M);
     return this.ramp()(t);
   }
 
@@ -54,18 +72,25 @@ export class IsobarMap {
     this.gLabels = this.svg.append("g").attr("class", "labels");
     this.gMarkers = this.svg.append("g").attr("class", "markers");
 
-    // basemap
+    // basemap — lower 48 ONLY. We use geoAlbers (not geoAlbersUsa) so there are
+    // no Alaska/Hawaii insets for the Southwest metros to bleed into.
+    const EXCLUDE = new Set(["02", "15", "72", "60", "66", "69", "78"]); // AK, HI, PR, territories
     let states = null;
     try {
       const us = await fetch(CONFIG.statesTopoUrl).then((r) => r.json());
-      states = topojson.feature(us, us.objects.states);
-      this.borders = topojson.mesh(us, us.objects.states, (a, b) => a !== b);
-      this.nation = topojson.merge(us, us.objects.states.geometries);
+      const so = us.objects.states;
+      const conus = {
+        type: "GeometryCollection",
+        geometries: so.geometries.filter((g) => !EXCLUDE.has(String(g.id))),
+      };
+      states = topojson.feature(us, conus);
+      this.borders = topojson.mesh(us, conus, (a, b) => a !== b);
+      this.nation = topojson.merge(us, conus.geometries);
     } catch (e) {
       console.warn("Basemap load failed; contours only.", e.message);
     }
 
-    this.projection = d3.geoAlbersUsa();
+    this.projection = d3.geoAlbers(); // standard CONUS Albers
     if (states) this.projection.fitSize([this.W, this.H], states);
     else this.projection.scale(1280).translate([this.W / 2, this.H / 2]);
     this.geoPath = d3.geoPath(this.projection);
@@ -75,15 +100,15 @@ export class IsobarMap {
         .append("path")
         .attr("d", this.geoPath(this.borders))
         .attr("fill", "none")
-        .attr("stroke", "rgba(20,30,45,0.35)")
+        .attr("stroke", "rgba(255,255,255,0.30)")
         .attr("stroke-width", 0.7)
         .attr("vector-effect", "non-scaling-stroke");
       this.gStates
         .append("path")
         .attr("d", this.geoPath(this.nation))
         .attr("fill", "none")
-        .attr("stroke", "rgba(20,30,45,0.55)")
-        .attr("stroke-width", 1.2)
+        .attr("stroke", "rgba(255,255,255,0.55)")
+        .attr("stroke-width", 1.4)
         .attr("vector-effect", "non-scaling-stroke");
       // clip the fills to the nation outline for a clean coast
       defs
@@ -125,7 +150,7 @@ export class IsobarMap {
     const contours = d3
       .contours()
       .size([CONFIG.gridX, CONFIG.gridY])
-      .thresholds(CONFIG.thresholds)(grid);
+      .thresholds(this.thresholds)(grid);
 
     // filled bands
     this.gFill
@@ -139,7 +164,7 @@ export class IsobarMap {
     // thin isolines
     this.gLines
       .selectAll("path")
-      .data(contours.filter((d) => d.value !== CONFIG.frontThreshold), (d) => d.value)
+      .data(contours.filter((d) => d.value !== this.frontThreshold), (d) => d.value)
       .join("path")
       .attr("d", (d) => this.contourPath(d))
       .attr("fill", "none")
@@ -148,7 +173,7 @@ export class IsobarMap {
       .attr("vector-effect", "non-scaling-stroke");
 
     // the demand FRONT — emphasised
-    const front = contours.find((d) => d.value === CONFIG.frontThreshold);
+    const front = contours.find((d) => d.value === this.frontThreshold);
     this.gFront
       .selectAll("path")
       .data(front ? [front] : [])

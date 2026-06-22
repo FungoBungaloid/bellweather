@@ -1,6 +1,6 @@
 // ui.js — progressive-disclosure widgets: evidence scatter, reallocation table,
 // drawer, and a tiny markdown renderer for the brief.
-import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+import { d3 } from "../vendor/libs.js";
 import { usd, pct } from "./action.js";
 
 // --- tiny, safe-enough markdown (headings, bold, italics, lists, hr) ---
@@ -103,6 +103,52 @@ export function reallocTable(diag) {
       <thead><tr><th>Metro</th><th>Demand</th><th>Now</th><th>Implied</th><th>Move</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
+}
+
+// --- broadcast ticker (chyron) ---------------------------------------------
+// One scrolling line of key reallocations across cities.
+export function tickerHTML(diag, catLabel) {
+  const items = diag.rows
+    .filter((r) => Math.abs(r.dollars) >= 15000)
+    .sort((a, b) => Math.abs(b.dollars) - Math.abs(a.dollars))
+    .slice(0, 18);
+  const parts = items.map((r) => {
+    const up = r.dollars >= 0;
+    const arrow = up ? "▲" : "▼";
+    const cls = up ? "up" : "dn";
+    const amt = (up ? "+" : "−") + "$" + Math.abs(Math.round(r.dollars / 1000)) + "K";
+    return `<span class="tk ${cls}"><span class="arr">${arrow}</span> <b>${r.name.toUpperCase()}</b> ${pct(r.value)} · ${amt}</span>`;
+  });
+  const lead = `<span class="tk lead">${catLabel.toUpperCase()} · REALLOCATION TICKER</span>`;
+  // duplicate for a seamless marquee loop
+  const seq = [lead, ...parts].join(`<span class="tk sep">◆</span>`);
+  return seq + `<span class="tk sep">◆</span>` + seq + `<span class="tk sep">◆</span>`;
+}
+
+// --- right-rail card (auto-cycling detail) ----------------------------------
+export function railCardHTML(r, catMeta) {
+  const up = r.value >= 0;
+  const kindLabel =
+    r.kind === "surge_underweight" ? "UNDER-INDEXED SURGE"
+    : r.kind === "slump_overweight" ? "OVER-INDEXED SLUMP"
+    : "ON PLAN";
+  const moveTxt = r.dollars >= 0 ? `+${usd(r.dollars)} IN` : `−${usd(-r.dollars)} OUT`;
+  const cw = (r.current_weight * 100);
+  const tw = (r.target_weight * 100);
+  const wmax = Math.max(cw, tw, 1);
+  return `
+    <div class="rc-kind ${r.kind}">${kindLabel}</div>
+    <div class="rc-city">${r.name}<span class="rc-st">, ${r.state}</span></div>
+    <div class="rc-demand ${up ? "warm" : "cool"}">
+      <span class="rc-big">${pct(r.value)}</span>
+      <span class="rc-sub">projected demand<br/>vs normal · ${Math.round((r.tmax*9)/5+32)}°F</span>
+    </div>
+    <div class="rc-bars">
+      <div class="rc-barrow"><span>NOW</span><div class="rc-bar"><i style="width:${(cw/wmax*100).toFixed(0)}%"></i></div><b>${cw.toFixed(1)}%</b></div>
+      <div class="rc-barrow imp"><span>IMPLIED</span><div class="rc-bar"><i style="width:${(tw/wmax*100).toFixed(0)}%"></i></div><b>${tw.toFixed(1)}%</b></div>
+    </div>
+    <div class="rc-move ${r.dollars >= 0 ? "pos" : "neg"}">${moveTxt}</div>
+    <div class="rc-owner">Owner · ${r.buyer} ${r.handle || ""}</div>`;
 }
 
 export { usd, pct };
