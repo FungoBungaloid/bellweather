@@ -1,8 +1,8 @@
 // isobars.js — the showpiece. A TV-weather map whose fronts are demand.
 // d3-contour over an IDW grid, drawn on a geoAlbersUsa states basemap.
-import { d3, topojson } from "../vendor/libs.js";
-import { CONFIG } from "./config.js";
-import { idwGrid } from "./interpolate.js";
+import { d3, topojson } from "../vendor/libs.js?v=2";
+import { CONFIG } from "./config.js?v=2";
+import { idwGrid } from "./interpolate.js?v=2";
 
 const FRACS = [0.13, 0.22, 0.34, 0.5, 0.72, 1.0]; // band edges as fraction of scale max
 

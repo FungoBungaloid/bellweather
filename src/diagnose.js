@@ -6,7 +6,7 @@
 //   dollars       : move * flightBudget
 //
 // Deterministic: same field -> same ranking. No randomness.
-import { CONFIG, DOW } from "./config.js";
+import { CONFIG, DOW } from "./config.js?v=2";
 
 const relu = (x) => (x > 0 ? x : 0);
 
