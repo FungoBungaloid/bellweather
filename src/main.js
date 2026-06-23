@@ -330,6 +330,7 @@ function renderDrawer(diag) {
 function wireControls() {
   $("lockBtn").onclick = () => lockIn();
   $("newRegion").onclick = backToGlobe;
+  $("backWord").onclick = backToGlobe;
   $("play").onclick = togglePlay;
   $("alert").onclick = () => openDrawer();
   $("openDrawer").onclick = () => openDrawer();

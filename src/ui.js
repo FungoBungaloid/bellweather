@@ -1,7 +1,7 @@
 // ui.js — progressive-disclosure widgets: evidence scatter, reallocation table,
 // drawer, and a tiny markdown renderer for the brief.
 import { d3 } from "../vendor/libs.js?v=3";
-import { usd, pct } from "./action.js?v=3";
+import { usd, pct, rarity } from "./action.js?v=3";
 
 // --- tiny, safe-enough markdown (headings, bold, italics, lists, hr) ---
 export function md(src) {
@@ -87,6 +87,7 @@ export function reallocTable(diag) {
       return `<tr>
         <td>${r.name}, ${r.state}</td>
         <td class="num">${pct(r.value)}</td>
+        <td class="num">${(r.surprise || 0).toFixed(1)}σ</td>
         <td class="num">${(r.current_weight * 100).toFixed(1)}%</td>
         <td class="num">${(r.target_weight * 100).toFixed(1)}%</td>
         <td class="num ${r.dollars >= 0 ? "pos" : "neg"}">${dlr}</td>
@@ -101,7 +102,7 @@ export function reallocTable(diag) {
     : `<div class="move">Shift <b>${usd(diag.reallocation)}</b> into <span class="pos">${h.name}</span></div>`;
   return `${move}
     <table class="realloc">
-      <thead><tr><th>Market</th><th>Demand</th><th>Now</th><th>Implied</th><th>Move</th><th></th></tr></thead>
+      <thead><tr><th>Market</th><th>Demand</th><th>Surprise</th><th>Now</th><th>Implied</th><th>Move</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -137,12 +138,14 @@ export function railCardHTML(r, catMeta) {
   const cw = (r.current_weight * 100);
   const tw = (r.target_weight * 100);
   const wmax = Math.max(cw, tw, 1);
+  const sig = (r.surprise || 0).toFixed(1);
+  const rar = rarity(r.surprise).toLowerCase();
   return `
     <div class="rc-kind ${r.kind}">${kindLabel}</div>
     <div class="rc-city">${r.name}<span class="rc-st">, ${r.state}</span></div>
     <div class="rc-demand ${up ? "warm" : "cool"}">
       <span class="rc-big">${pct(r.value)}</span>
-      <span class="rc-sub">projected demand<br/>vs normal · ${Math.round((r.tmax*9)/5+32)}°F</span>
+      <span class="rc-sub">demand vs normal<br/><b>${sig}σ</b> · ${rar} for ${r.name}</span>
     </div>
     <div class="rc-bars">
       <div class="rc-barrow"><span>NOW</span><div class="rc-bar"><i style="width:${(cw/wmax*100).toFixed(0)}%"></i></div><b>${cw.toFixed(1)}%</b></div>

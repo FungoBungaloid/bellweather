@@ -25,14 +25,20 @@ Open `index.html` and it runs.
 4. **The map.** Renders it as an animated **demand-pressure map** — blue→paper→orange
    isobands that overprint a warm-paper basemap. Press play and watch the *demand front*
    sweep across the region.
-5. **The gap.** Cross-references demand against the brand's **actual media plan** and ranks
-   the dollar-sized gaps — where demand is surging but spend is light (and vice-versa).
+5. **The gap — the non-obvious one.** Cross-references demand against the brand's **actual
+   media plan** and ranks the dollar-sized gaps by **statistical surprise**: the anomaly
+   measured in each market's *own* day-to-day variability (z-score / σ). A +4°C jump is a
+   shrug in volatile Chicago but a rare event in steady San Diego — so the headline is the
+   *hidden* move (an unusual swing the plan never prices in), not the obvious "it's hot in
+   Phoenix" call.
 6. **The action.** Generates a strategist brief + a specific *from → to* dollar
    reallocation and **fires a real Slack message** to the named regional buyer.
 
-**A product gallery, not a binary.** ~10 weather-sensitive lines — Ice Cream, Sunscreen,
-Lemonade, Iced Coffee, Sports Drink, Air Conditioning (heat-driven) vs Soup, Hot Chocolate,
-Tea, Slow Cooker (cold-driven). Switch products on the same day and watch the map invert.
+**A product gallery, not a binary.** ~16 weather-sensitive lines across a fictional house
+brand — Ice Cream, Freezer Pops, Cold Brew, Electrolyte Mix, Sparkling Water, Sunscreen,
+Swimwear, Insect Repellent, Portable AC, Garden Centre (heat-driven) vs Soup, Hot Cocoa,
+Herbal Tea, Lip Balm, Slow Cooker, Firewood (cold-driven). Switch products on the same day
+and watch the map — and the recommended markets — invert.
 
 ---
 
@@ -215,8 +221,11 @@ bellwether/
 
 ```
 anomaly(city, day)        = forecast(city, day) − climatological_normal(city, day-of-year)
+surprise(city, day)       = anomaly / σ(city)                # z-score in the market's own swings
 demand_delta(prod, city)  = elasticity(prod) × anomaly       # unitless % vs normal
-opportunity(city, prod)   = |target_weight − current_weight| × flight_budget
+implied_weight(city)      ∝ market_value × relu(demand_delta) × surprise_weight
+opportunity(city, prod)   = |implied_weight − current_weight| × flight_budget
+score(city)               = |Δ$| × (0.3 + surprise)          # ranking is surprise-led
 ```
 
 `target_weight` is the budget share the demand signal implies (market value × surge,

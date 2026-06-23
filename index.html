@@ -124,6 +124,10 @@
       }
       #topbar .wordmark { font-size: 20px; }
       #topbar .wordmark .o { width: 12px; height: 12px; }
+      .backword { border: none; background: none; color: var(--ink); cursor: pointer; padding: 0; position: relative; }
+      .backword::after { content: "↩ globe"; font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1px;
+        text-transform: uppercase; color: var(--paper); background: var(--ink); padding: 2px 5px; margin-left: 8px; vertical-align: middle; }
+      .backword:hover::after { background: var(--orange); }
       .ctx { display: flex; align-items: baseline; gap: 10px; border-left: 2px solid var(--ink); padding-left: 16px; }
       .ctx .region { font-weight: 700; font-size: 16px; letter-spacing: -.2px; }
       .ctx .prod { font-family: var(--mono); font-size: 12px; letter-spacing: .5px; color: var(--muted); text-transform: uppercase; }
@@ -344,7 +348,7 @@
     <!-- ============================ SCREEN 2: FORECAST ============================ -->
     <div id="app">
       <header id="topbar">
-        <span class="wordmark"><span class="o"></span>BELLWETHER</span>
+        <button class="wordmark backword" id="backWord" title="Back to the globe"><span class="o"></span>BELLWETHER</button>
         <span class="ctx"><span class="region" id="ctxRegion">—</span><span class="prod" id="ctxProd">—</span></span>
         <div class="topright">
           <span class="chip" id="source-badge">…</span>

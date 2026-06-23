@@ -203,10 +203,15 @@ def build_cities_and_plan():
     raw = {}
     for i, (name, admin, country, cc, region, lat, lon, pop, tmean, tamp) in enumerate(CITIES):
         cid_ = cid(name, cc)
+        # Per-market day-to-day temperature variability (°C). Coastal/tropical
+        # markets (small seasonal amplitude) are far steadier than continental
+        # ones — this is what makes a modest anomaly *surprising* in one place
+        # and a shrug in another. It powers the non-obvious ranking.
+        sigma = round(max(1.6, min(6.0, 1.5 + 0.20 * tamp)), 2)
         cities.append({
             "id": cid_, "name": name,
             "state": admin or cc, "country": country, "cc": cc, "region": region,
-            "lat": lat, "lon": lon, "population": pop,
+            "lat": lat, "lon": lon, "population": pop, "sigma": sigma,
         })
         # Deliberately mis-aligned plan: over-weight cooler markets, under-weight
         # hot ones, so the diagnosis layer surfaces real summer gaps.
@@ -242,38 +247,62 @@ def build_normals():
 # Accents are flat riso inks — warm orange family for heat-driven lines, blue
 # family for cold-comfort lines (a couple of off-hues for gallery variety).
 # ---------------------------------------------------------------------------
+# The portfolio of a fictional national house brand — a *universe* of lines, each
+# with its own weather signature. Heat-driven lines flush when temperature departs
+# ABOVE normal; cold-driven lines flush when it departs BELOW. Every line is
+# temperature-driven so the anomaly→demand story stays apples-to-apples.
 PRODUCTS = [
     # id, label, proxy, elasticity, r2, accent, icon, tagline, creative_angle
-    ("ice_cream", "Ice Cream", "Ice_cream", 1.84, 0.68, "#ff5a1f", "🍦",
-     "Demand climbs fast as heat departs above normal — peak impulse category.",
-     "Lean into the heat: \"Beat the {temp_f}° spike.\" Push chilled, on-the-go impulse occasions; day-part toward the afternoon peak."),
+    # ---- heat-driven (positive elasticity) ----
+    ("ice_cream", "Pint-size Ice Cream", "Ice_cream", 1.84, 0.68, "#ff5a1f", "🍦",
+     "Take-home pints — impulse demand spikes the moment heat runs above normal.",
+     "Lean into the break in the weather: \"It hit {temp_f}° — earn the treat.\" Late-afternoon and evening freezer runs."),
+    ("freezer_pops", "Freezer Pops", "Ice_pop", 1.98, 0.61, "#ff7a3d", "🧊",
+     "Kid-led, hyper-elastic: the cheapest cool-down, first to move on a hot snap.",
+     "Family + value cue: \"{temp_f}° outside — stock the freezer.\" Multipack, basket-builder messaging."),
+    ("cold_brew", "Cold Brew Coffee", "Iced_coffee", 1.35, 0.51, "#9c5a2a", "🧋",
+     "The warm-to-cold cue flip: iced overtakes hot when it runs warmer than usual.",
+     "Reframe the daily ritual: \"Iced, for the {temp_f}° morning.\" Commute and mid-afternoon day-parts."),
+    ("electrolyte", "Electrolyte Mix", "Sports_drink", 1.15, 0.47, "#ff5a7a", "🥤",
+     "Hydration lifts with above-normal heat and sweat — function over flavour.",
+     "Performance + replenishment: \"Out-sweat the {temp_f}°.\" Gym, jobsite and youth-sport occasions."),
+    ("sparkling", "Sparkling Water", "Carbonated_water", 0.92, 0.40, "#36b3c4", "🫧",
+     "A gentle lift — the everyday fridge-filler nudges up on warmer-than-normal days.",
+     "Light refreshment: \"Fizz for a {temp_f}° afternoon.\" Multipack pantry-load, no-calorie cue."),
     ("sunscreen", "Sunscreen", "Sunscreen", 1.55, 0.62, "#ff8a1f", "🧴",
      "Sun-protection demand spikes with hotter, brighter-than-normal days.",
-     "Sell preparedness: \"{temp_f}° and climbing — cover up.\" Lead with UV/outdoor occasions and same-day pickup."),
-    ("lemonade", "Lemonade", "Lemonade", 1.70, 0.58, "#ffc21f", "🍋",
-     "Thirst-quench demand rises sharply when it runs hotter than normal.",
-     "Refreshment cue: \"Cool the {temp_f}°.\" Push grab-and-go, picnic and patio occasions."),
-    ("iced_coffee", "Iced Coffee", "Iced_coffee", 1.35, 0.51, "#c8702a", "🧋",
-     "Cold-brew interest tracks heat departures above the local normal.",
-     "Swap the cue from warm to cold: \"Iced, for the {temp_f}° afternoon.\" Morning + commute day-parts."),
-    ("sports_drink", "Sports Drink", "Sports_drink", 1.15, 0.47, "#ff5a7a", "🥤",
-     "Hydration demand lifts with above-normal heat and activity.",
-     "Performance + replenishment: \"Out-sweat the {temp_f}°.\" Gym, field and outdoor-work occasions."),
-    ("air_conditioning", "Air Conditioning", "Air_conditioning", 2.05, 0.71, "#e23a1f", "❄️",
-     "Cooling demand surges hardest of all when heat departs above normal.",
-     "Urgency + relief: \"{temp_f}° inside is optional.\" Push installation/units and same-week service windows."),
-    ("soup", "Soup", "Soup", -1.46, 0.55, "#2436d4", "🥣",
+     "Preparedness, not panic: \"{temp_f}° and clear — cover up.\" UV/outdoor occasions, same-day pickup."),
+    ("swimwear", "Swimwear", "Swimsuit", 1.40, 0.50, "#1fb0ff", "🩱",
+     "Discretionary and weather-triggered — an early warm spell pulls the season forward.",
+     "Bring the season forward: \"{temp_f}° already? Dive in.\" Pool, lake and coastal trip occasions."),
+    ("bug_spray", "Insect Repellent", "Insect_repellent", 1.22, 0.44, "#7a9c2a", "🦟",
+     "Warm, muggy spells above normal wake the bugs — and the category.",
+     "Protect the outdoors: \"Warm nights, more bites.\" Patio, camping and evening-outdoor occasions."),
+    ("portable_ac", "Portable AC", "Air_conditioning", 2.05, 0.71, "#e23a1f", "❄️",
+     "The sharpest mover of all — a heat anomaly converts shoppers to buyers fast.",
+     "Urgency + relief: \"{temp_f}° indoors is optional.\" Units + same-week install windows."),
+    ("garden_centre", "Garden Centre", "Gardening", 1.05, 0.43, "#4caa45", "🪴",
+     "Mild-to-warm departures pull weekend gardeners out earlier than the calendar.",
+     "Catch the first nice weekend: \"{temp_f}° — get planting.\" Soil, seedlings and tool baskets."),
+    # ---- cold-driven (negative elasticity) ----
+    ("soup", "Ready Soup", "Soup", -1.46, 0.55, "#2436d4", "🥣",
      "Comfort demand rises when it turns colder than the local normal.",
-     "Sell warmth: \"When it turns, we're ready.\" Evening and weekend dwell-time, cozy at-home messaging."),
-    ("hot_chocolate", "Hot Chocolate", "Hot_chocolate", -1.62, 0.60, "#1f5fd4", "☕",
-     "Hot-drink demand climbs as temperatures fall below normal.",
+     "Sell warmth on the turn: \"When it dropped, we were ready.\" Evening dwell-time, cosy at-home messaging."),
+    ("hot_cocoa", "Hot Cocoa", "Hot_chocolate", -1.62, 0.60, "#1f5fd4", "☕",
+     "Hot-drink demand climbs as temperatures fall below normal — treat, not staple.",
      "Cosy occasion: \"Colder than usual — warm up.\" Family, after-school and weekend-treat moments."),
-    ("tea", "Tea", "Tea", -1.05, 0.44, "#2a8fb8", "🍵",
-     "Tea interest lifts modestly when it runs cooler than normal.",
-     "Everyday comfort: \"A cooler-than-usual day calls for it.\" Morning and evening rituals."),
+    ("herbal_tea", "Herbal Tea", "Herbal_tea", -1.00, 0.42, "#2a8fb8", "🍵",
+     "A steady lift on cool-than-normal days — wellness and wind-down cues.",
+     "Everyday comfort: \"A cooler-than-usual evening calls for it.\" Wind-down and morning rituals."),
+    ("lip_balm", "Lip Balm", "Lip_balm", -1.10, 0.40, "#5a7fd4", "💄",
+     "Cold, dry departures crack lips — a tiny basket-add that moves with the chill.",
+     "Impulse at the till: \"Cold snap incoming — protect.\" Front-of-store, multipack add-ons."),
     ("slow_cooker", "Slow Cooker", "Slow_cooker", -1.30, 0.50, "#4b3fd4", "🍲",
      "Hearty-cooking demand rises on colder-than-normal stretches.",
      "Plan-ahead comfort: \"Set it for the cold snap.\" Weekend grocery + meal-prep occasions."),
+    ("firewood", "Firewood & Logs", "Firewood", -1.55, 0.52, "#3a2fb0", "🪵",
+     "A genuine cold-snap buy — stocks up hard when it runs below normal.",
+     "Beat the chill: \"Colder than forecast — stock up.\" Bundle + delivery, fireplace and fire-pit occasions."),
 ]
 
 
@@ -341,9 +370,15 @@ def build_forecast_snapshot(normals):
         for k in range(days):
             doy = ((doy0 - 1 + k) % 366) + 1
             base = normals[cid_]["temperature_2m_max"][doy - 1]
-            # Travelling warm/cool fronts: two sinusoids that march each day.
-            anom = (5.5 * math.sin(rlon + 0.9 * k) * math.cos(rlat * 1.2)
-                    + 2.5 * math.sin(rlat * 2.0 - 0.5 * k))
+            # Travelling warm/cool fronts: layered sinusoids at a few spatial
+            # frequencies that march each day, so every region sees a real
+            # departure on some day of the week. Amplitude is deliberately punchy
+            # so steady, low-σ markets (coastal/tropical) post rare z-scores when
+            # a front catches them — that's the non-obvious money the demo shows.
+            anom = (8.0 * math.sin(rlon * 1.3 + 0.8 * k) * math.cos(rlat * 1.1)
+                    + 4.0 * math.sin(rlat * 2.2 - 0.5 * k)
+                    + 3.5 * math.sin(rlon * 2.7 - 0.3 * k + rlat))
+            anom = max(-12.0, min(12.0, anom))
             t = base + anom + random.gauss(0, 0.6)
             tmax.append(round(t, 1))
             precip.append(round(max(0.0, random.gauss(1.2, 2.0)) if anom < 0
