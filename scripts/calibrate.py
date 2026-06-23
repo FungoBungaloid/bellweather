@@ -57,11 +57,29 @@ REFERENCE_CITIES = [
 ]
 
 # Category -> (label, driver var, expected direction, candidate proxy articles).
+# Mirrors the product gallery in data/categories.json; calibration keeps the
+# best-r² proxy from each candidate list.
 CATEGORIES = {
-    "cold_refreshment": ("Cold Refreshment", "temperature_2m_max", "positive",
-                         ["Ice_cream", "Iced_coffee", "Lemonade", "Sunscreen", "Air_conditioning"]),
-    "warm_comfort": ("Warm Comfort", "temperature_2m_max", "negative",
-                     ["Soup", "Hot_chocolate", "Tea", "Slow_cooker"]),
+    "ice_cream": ("Ice Cream", "temperature_2m_max", "positive",
+                  ["Ice_cream", "Gelato", "Soft_serve"]),
+    "sunscreen": ("Sunscreen", "temperature_2m_max", "positive",
+                  ["Sunscreen", "Sunburn", "Sun_tanning"]),
+    "lemonade": ("Lemonade", "temperature_2m_max", "positive",
+                 ["Lemonade", "Iced_tea", "Aguas_frescas"]),
+    "iced_coffee": ("Iced Coffee", "temperature_2m_max", "positive",
+                    ["Iced_coffee", "Cold_brew_coffee", "Frappé_coffee"]),
+    "sports_drink": ("Sports Drink", "temperature_2m_max", "positive",
+                     ["Sports_drink", "Gatorade", "Electrolyte"]),
+    "air_conditioning": ("Air Conditioning", "temperature_2m_max", "positive",
+                         ["Air_conditioning", "Heat_wave", "Evaporative_cooler"]),
+    "soup": ("Soup", "temperature_2m_max", "negative",
+             ["Soup", "Stew", "Broth"]),
+    "hot_chocolate": ("Hot Chocolate", "temperature_2m_max", "negative",
+                      ["Hot_chocolate", "Mulled_wine", "Cocoa_solids"]),
+    "tea": ("Tea", "temperature_2m_max", "negative",
+            ["Tea", "Herbal_tea", "Masala_chai"]),
+    "slow_cooker": ("Slow Cooker", "temperature_2m_max", "negative",
+                    ["Slow_cooker", "Casserole", "Pot_roast"]),
 }
 
 
@@ -182,11 +200,12 @@ def calibrate_category(cat_id, meta, start, end):
 
 
 def build_normals(years):
-    """Per-metro day-of-year mean daily max from ERA5 -> data/normals.json."""
+    """Per-city day-of-year mean daily max from ERA5 -> data/normals.json.
+    Reads the global city list written by gen_demo_data.py."""
     start, end = daterange(years)
-    metros = json.load(open(os.path.join(DATA, "metros.json")))
+    cities = json.load(open(os.path.join(DATA, "cities.json")))
     normals = {}
-    for m in metros:
+    for m in cities:
         print(f"   normals {m['name']} ...")
         raw = fetch_archive_tmax(m["lat"], m["lon"], start, end, "temperature_2m_max")
         by_doy = {}
@@ -200,7 +219,7 @@ def build_normals(years):
         time.sleep(0.4)
     json.dump(normals, open(os.path.join(DATA, "normals.json"), "w"),
               separators=(",", ":"))
-    print(f"   wrote normals.json ({len(normals)} metros)")
+    print(f"   wrote normals.json ({len(normals)} cities)")
 
 
 def main():

@@ -34,9 +34,9 @@ def get_json(url):
         return json.load(r)
 
 
-def fetch_forecast(metros):
-    lats = ",".join(str(m["lat"]) for m in metros)
-    lons = ",".join(str(m["lon"]) for m in metros)
+def fetch_forecast(cities):
+    lats = ",".join(str(m["lat"]) for m in cities)
+    lons = ",".join(str(m["lon"]) for m in cities)
     q = urllib.parse.urlencode({
         "latitude": lats, "longitude": lons,
         "daily": "temperature_2m_max,precipitation_sum",
@@ -54,39 +54,50 @@ def doy(iso):
 
 
 def main():
-    metros = load("metros.json")
+    cities = load("cities.json")
     plan = load("media_plan.json")
     normals = load("normals.json")
     coef = load("coefficients.json")
 
     try:
-        arr = fetch_forecast(metros)
+        arr = fetch_forecast(cities)
         source = "live"
+        daily_by_id = {cities[i]["id"]: arr[i]["daily"]
+                       for i in range(min(len(cities), len(arr)))}
     except Exception as e:
         print(f"Live forecast failed ({e}); reusing existing snapshot.", file=sys.stderr)
         snap = load("forecast_snapshot.json")
-        arr = snap["metros"]
+        daily_by_id = snap["byId"]
         source = "snapshot"
 
-    dates = arr[0]["daily"]["time"]
+    dates = next(iter(daily_by_id.values()))["time"]
 
-    # write snapshot (graceful-failure cache)
-    snap = {"generated_at": date.today().isoformat(), "source": source,
-            "metros": [{"latitude": m["lat"], "longitude": m["lon"], "timezone": "auto",
-                        "daily": arr[i]["daily"]} for i, m in enumerate(metros)]}
+    # write snapshot (graceful-failure cache), keyed by city id
+    by_id = {}
+    for cid, d in daily_by_id.items():
+        n = len(d["time"])
+        by_id[cid] = {
+            "time": d["time"],
+            "temperature_2m_max": d["temperature_2m_max"],
+            "precipitation_sum": d.get("precipitation_sum", [0] * n),
+        }
+    snap = {"generated_at": date.today().isoformat(), "source": source, "byId": by_id}
     json.dump(snap, open(os.path.join(DATA, "forecast_snapshot.json"), "w"),
               separators=(",", ":"))
-    print(f"Wrote forecast_snapshot.json ({source}, {len(dates)} days)")
+    print(f"Wrote forecast_snapshot.json ({source}, {len(by_id)} cities, {len(dates)} days)")
 
-    # demand field + diagnosis per category, pick the punchiest day overall
+    # demand field + diagnosis per category, pick the punchiest day worldwide
     best = None
     for cat_id, cat in coef["categories"].items():
         e = cat["elasticity"]
         for di, dstr in enumerate(dates):
             d = doy(dstr)
             field = []
-            for i, m in enumerate(metros):
-                t = arr[i]["daily"]["temperature_2m_max"][di]
+            for m in cities:
+                dd = by_id.get(m["id"])
+                if not dd or m["id"] not in normals:
+                    continue
+                t = dd["temperature_2m_max"][di]
                 normal = normals[m["id"]]["temperature_2m_max"][min(365, d - 1)]
                 anom = t - normal
                 field.append({"m": m, "tmax": t, "anom": anom, "value": e * anom})

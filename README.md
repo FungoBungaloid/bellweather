@@ -1,9 +1,9 @@
-# 🌦️ Bellwether
+# Bellwether
 
-> **A weather map, but the fronts are demand.**
-> Bellwether watches the live forecast across ~40 US metros, projects where consumer
-> demand is about to **depart from normal**, finds where a brand's media money *isn't*
-> following that demand, and pushes the fix — **three days before the weather arrives.**
+> **A demand map, where the fronts are consumer demand.**
+> Spin a globe to **any market on Earth**, lock it in, and Bellwether projects where
+> consumer demand is about to **depart from normal**, finds where a brand's media money
+> *isn't* following that demand, and pushes the fix — **before the weather arrives.**
 
 Built for the **AI & Tech Sandbox Global Hackathon 2026** — *"Intelligence to Action."*
 
@@ -14,13 +14,25 @@ Open `index.html` and it runs.
 
 ## What it does (the 60-second story)
 
-1. **Live signal.** Pulls a keyless multi-day forecast for ~40 metros from Open-Meteo, in one batched call.
-2. **Demand model.** Converts forecast → **% demand departure from normal** per category per metro, using **elasticities calibrated on years of real historical demand data** (`r²` shown on screen).
-3. **The map.** Renders it as an animated, TV-weather-style **isobar map**. Press play and watch the *demand front* sweep across the country.
-4. **The gap.** Cross-references demand against the brand's **actual media plan** and ranks the dollar-sized gaps — where demand is surging but spend is light (and vice-versa).
-5. **The action.** Generates a strategist brief + a specific *from → to* dollar reallocation and **fires a real Slack message** to the named regional buyer.
+1. **Aim anywhere.** Open on a spun-up globe of ~120 world cities. Drag to any region,
+   pick a product line from the gallery, and **lock it in** — that confirms the view and
+   generates the forecast + product intelligence for exactly that region.
+2. **Live signal.** Pulls a keyless multi-day forecast for the locked region from
+   Open-Meteo, in one batched call.
+3. **Demand model.** Converts forecast → **% demand departure from normal** per product
+   per market, using **elasticities calibrated on years of real historical demand data**
+   (`r²` shown on screen).
+4. **The map.** Renders it as an animated **demand-pressure map** — blue→paper→orange
+   isobands that overprint a warm-paper basemap. Press play and watch the *demand front*
+   sweep across the region.
+5. **The gap.** Cross-references demand against the brand's **actual media plan** and ranks
+   the dollar-sized gaps — where demand is surging but spend is light (and vice-versa).
+6. **The action.** Generates a strategist brief + a specific *from → to* dollar
+   reallocation and **fires a real Slack message** to the named regional buyer.
 
-Two product lines with **opposite** weather elasticities (Cold Refreshment ☀️ vs Warm Comfort 🍵). Switch tabs and watch the map invert.
+**A product gallery, not a binary.** ~10 weather-sensitive lines — Ice Cream, Sunscreen,
+Lemonade, Iced Coffee, Sports Drink, Air Conditioning (heat-driven) vs Soup, Hot Chocolate,
+Tea, Slow Cooker (cold-driven). Switch products on the same day and watch the map invert.
 
 ---
 
@@ -34,18 +46,20 @@ python3 -m http.server 8000
 #   or:  npx serve .
 ```
 
-Open **http://localhost:8000**. That's it.
+Open **http://localhost:8000**. Spin the globe, pick a product, hit **LOCK IN**.
 
 > **Fully self-contained.** `d3`, `topojson`, and the US basemap are **vendored
 > locally** (`vendor/libs.js`, `data/states-10m.json`) — no CDN, no npm needed at
 > runtime. The only network call is the **live forecast**; if it fails (or you're
 > offline), the app falls back to `data/forecast_snapshot.json` so the map is
-> never blank. The header badge shows **● LIVE FORECAST** or **● CACHED SNAPSHOT**
-> so you always know which you're seeing.
+> never blank. The header chip shows **LIVE** or **SNAPSHOT** so you always know
+> which you're seeing.
 
-It's built as a **broadcast weather forecast**: a fullscreen dark map (⤢ button for
-true fullscreen), a scrolling reallocation **ticker** along the bottom, an
-auto-cycling **right rail** of the biggest moves, and an animated day strip.
+The design is a deliberately **editorial / risograph poster** language — warm paper,
+ink, two flat riso inks (blue + fluoro orange), bold geometric type, monospace data,
+a scrolling reallocation **feed** (chyron) along the bottom, and an auto-cycling
+**right rail** of the biggest moves.
+
 
 ---
 
@@ -120,15 +134,19 @@ manually with **Actions → Bellwether morning run → Run workflow**.
 
 ## How the demo flows (run sheet)
 
-1. Open the app. It lands on the punchiest day for **Cold Refreshment**, the demand front mid-sweep.
-2. **Press ▶** — the front sweeps across the US over the week. (The single most persuasive moment.)
-3. **Tap the headline alert** (bottom of the map) → the drawer opens:
+1. Open the app on the **globe**. Drag to a region (e.g. the US Southeast), pick a product
+   from the gallery (e.g. **Ice Cream 🍦**), and hit **LOCK IN**.
+2. The region's forecast + product intelligence generate, and the demand-pressure map appears
+   on the punchiest day, the demand front mid-sweep.
+3. **Press ▶** — the front sweeps across the region over the week. (The single most persuasive moment.)
+4. **Tap the headline alert** (bottom of the map) → the drawer opens:
    - the **reallocation** table (from → to, dollar-sized),
    - **Fire alert / Copy / Download**,
    - the **evidence** scatter with `r²` and elasticity,
    - the full **strategist brief**.
-4. **Tap "Fire alert"** → Slack message (or email draft) to the named buyer.
-5. **Switch to Warm Comfort 🍵** on the same day — the map inverts. Opposite elasticity, opposite story, same engine.
+5. **Tap "Fire alert"** → Slack message (or email draft) to the named buyer.
+6. **Switch products** on the same day (e.g. to **Soup 🥣**) — the map inverts. Opposite
+   elasticity, opposite story, same engine. Hit **↻ New region** to fly back to the globe.
 
 ---
 
@@ -160,27 +178,28 @@ Straight answer, because it matters for the demo:
 
 ```
 bellwether/
-├── index.html              # single-page broadcast app shell + styling
+├── index.html              # single-page app shell + risograph-poster styling
 ├── vendor/libs.js          # bundled d3 + topojson (no CDN at runtime)
 ├── build/                  # esbuild entry + bundle script for vendor/libs.js
 ├── src/
-│   ├── config.js           # all dials (budget, thresholds, Slack URL, endpoints)
-│   ├── main.js             # orchestration: load → fetch → render → diagnose → act
+│   ├── config.js           # all dials (budget, thresholds, lock radius, palette, endpoints)
+│   ├── main.js             # orchestration: globe → lock region → fetch → render → diagnose → act
+│   ├── globe.js            # orthographic globe; aim + lock-in region selection
 │   ├── forecast.js         # batched keyless Open-Meteo fetch + snapshot fallback
-│   ├── model.js            # anomaly + elasticity → demand_delta
+│   ├── model.js            # anomaly + elasticity → demand_delta (over the locked region)
 │   ├── interpolate.js      # Inverse Distance Weighting grid
-│   ├── isobars.js          # d3-contour + geoAlbersUsa rendering + animation
-│   ├── diagnose.js         # opportunity scoring + ranking
+│   ├── isobars.js          # d3-contour + regional geoMercator rendering + animation
+│   ├── diagnose.js         # opportunity scoring + ranking (weights renormalised per region)
 │   ├── action.js           # brief template + Slack/mailto
 │   └── ui.js               # ticker, rail card, evidence scatter, reallocation table, markdown
 ├── data/
-│   ├── metros.json         # ~40 US metros (lat/lon/population)
-│   ├── media_plan.json     # current spend weights + named buyer per metro
-│   ├── categories.json     # portfolio definitions + creative angles
+│   ├── cities.json         # ~120 world cities (id, name, country, region, lat/lon/population)
+│   ├── media_plan.json     # current spend weights + named buyer per city
+│   ├── categories.json     # the product gallery (~10 lines) + accents + creative angles
 │   ├── coefficients.json   # elasticity, r², scatter   (seed; calibrate.py overwrites)
 │   ├── normals.json        # climatological normals     (seed; calibrate.py overwrites)
-│   ├── states-10m.json     # vendored US states basemap (lower 48)
-│   └── forecast_snapshot.json  # graceful-failure cache (morning_run.py refreshes)
+│   ├── states-10m.json     # vendored US states basemap (drawn when a region touches the US)
+│   └── forecast_snapshot.json  # graceful-failure cache, keyed by city id (morning_run.py refreshes)
 ├── scripts/
 │   ├── calibrate.py        # BUILD-TIME: Wikipedia + ERA5 → coefficients/normals
 │   ├── morning_run.py      # unattended loop: refresh snapshot + post Slack alert
@@ -195,19 +214,22 @@ bellwether/
 ## The model, briefly
 
 ```
-anomaly(metro, day)       = forecast(metro, day) − climatological_normal(metro, day-of-year)
-demand_delta(cat, metro)  = elasticity(cat) × anomaly        # unitless % vs normal
-opportunity(metro, cat)   = |target_weight − current_weight| × flight_budget
+anomaly(city, day)        = forecast(city, day) − climatological_normal(city, day-of-year)
+demand_delta(prod, city)  = elasticity(prod) × anomaly       # unitless % vs normal
+opportunity(city, prod)   = |target_weight − current_weight| × flight_budget
 ```
 
 `target_weight` is the budget share the demand signal implies (market value × surge,
-normalised across metros). The headline pairs the most **under-funded surge** with the
-most **over-funded slump** into one explicit *from → to* move. Scoring is fully
-deterministic — the same forecast always ranks the same alert first.
+normalised across the locked region). Current weights are also renormalised within the
+region, so any subset the globe locks onto is treated as 100% of that flight. The headline
+pairs the most **under-funded surge** with the most **over-funded slump** into one explicit
+*from → to* move. Scoring is fully deterministic — the same forecast always ranks the same
+alert first.
 
-The map: `demand_delta` at each metro → **IDW** interpolation onto a grid →
-`d3.contours()` isobands → drawn over a `geoAlbersUsa` states basemap, with the
-**demand front** (the normal→surge crossing) emphasised.
+The map: `demand_delta` at each city → **IDW** interpolation onto a grid →
+`d3.contours()` isobands → drawn on a `geoMercator` projection fit to the locked region
+(US state borders overlaid when the region touches the US), with the **demand front**
+(the normal→surge crossing) emphasised.
 
 ---
 

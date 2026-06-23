@@ -1,6 +1,6 @@
 // action.js — turn the top alert into a strategist-grade brief and a real push
 // (Slack via a tiny Worker, or a prefilled mailto: fallback that works anywhere).
-import { CONFIG, DOW_LONG } from "./config.js?v=2";
+import { CONFIG, DOW_LONG } from "./config.js?v=3";
 
 const usd = (n) =>
   "$" + Math.round(n).toLocaleString("en-US");
