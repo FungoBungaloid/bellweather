@@ -57,29 +57,44 @@ REFERENCE_CITIES = [
 ]
 
 # Category -> (label, driver var, expected direction, candidate proxy articles).
-# Mirrors the product gallery in data/categories.json; calibration keeps the
-# best-r² proxy from each candidate list.
+# MUST stay in sync with the product ids in data/categories.json (the gallery);
+# calibration keeps the best-r² proxy from each candidate list and overwrites
+# data/coefficients.json. All lines are temperature-driven.
 CATEGORIES = {
+    # heat-driven (positive elasticity)
     "ice_cream": ("Ice Cream", "temperature_2m_max", "positive",
                   ["Ice_cream", "Gelato", "Soft_serve"]),
+    "freezer_pops": ("Freezer Pops", "temperature_2m_max", "positive",
+                     ["Ice_pop", "Popsicle", "Ice_cream"]),
+    "cold_brew": ("Cold Brew Coffee", "temperature_2m_max", "positive",
+                  ["Iced_coffee", "Cold_brew_coffee", "Frappé_coffee"]),
+    "electrolyte": ("Electrolyte Mix", "temperature_2m_max", "positive",
+                    ["Sports_drink", "Gatorade", "Electrolyte"]),
+    "sparkling": ("Sparkling Water", "temperature_2m_max", "positive",
+                  ["Carbonated_water", "Sparkling_water", "Club_soda"]),
     "sunscreen": ("Sunscreen", "temperature_2m_max", "positive",
                   ["Sunscreen", "Sunburn", "Sun_tanning"]),
-    "lemonade": ("Lemonade", "temperature_2m_max", "positive",
-                 ["Lemonade", "Iced_tea", "Aguas_frescas"]),
-    "iced_coffee": ("Iced Coffee", "temperature_2m_max", "positive",
-                    ["Iced_coffee", "Cold_brew_coffee", "Frappé_coffee"]),
-    "sports_drink": ("Sports Drink", "temperature_2m_max", "positive",
-                     ["Sports_drink", "Gatorade", "Electrolyte"]),
-    "air_conditioning": ("Air Conditioning", "temperature_2m_max", "positive",
-                         ["Air_conditioning", "Heat_wave", "Evaporative_cooler"]),
+    "swimwear": ("Swimwear", "temperature_2m_max", "positive",
+                 ["Swimsuit", "Swimwear", "Bikini"]),
+    "bug_spray": ("Insect Repellent", "temperature_2m_max", "positive",
+                  ["Insect_repellent", "Mosquito", "DEET"]),
+    "portable_ac": ("Portable AC", "temperature_2m_max", "positive",
+                    ["Air_conditioning", "Heat_wave", "Evaporative_cooler"]),
+    "garden_centre": ("Garden Centre", "temperature_2m_max", "positive",
+                      ["Gardening", "Garden_centre", "Vegetable_gardening"]),
+    # cold-driven (negative elasticity)
     "soup": ("Soup", "temperature_2m_max", "negative",
              ["Soup", "Stew", "Broth"]),
-    "hot_chocolate": ("Hot Chocolate", "temperature_2m_max", "negative",
-                      ["Hot_chocolate", "Mulled_wine", "Cocoa_solids"]),
-    "tea": ("Tea", "temperature_2m_max", "negative",
-            ["Tea", "Herbal_tea", "Masala_chai"]),
+    "hot_cocoa": ("Hot Cocoa", "temperature_2m_max", "negative",
+                  ["Hot_chocolate", "Mulled_wine", "Cocoa_solids"]),
+    "herbal_tea": ("Herbal Tea", "temperature_2m_max", "negative",
+                   ["Herbal_tea", "Tea", "Masala_chai"]),
+    "lip_balm": ("Lip Balm", "temperature_2m_max", "negative",
+                 ["Lip_balm", "Chapped_lips", "Lip_gloss"]),
     "slow_cooker": ("Slow Cooker", "temperature_2m_max", "negative",
                     ["Slow_cooker", "Casserole", "Pot_roast"]),
+    "firewood": ("Firewood & Logs", "temperature_2m_max", "negative",
+                 ["Firewood", "Fireplace", "Wood_fuel"]),
 }
 
 
