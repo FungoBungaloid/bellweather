@@ -2,19 +2,20 @@
 """
 gen_demo_data.py — generate the seed/demo data files for Bellwether.
 
-This produces *plausible* data so the app runs end-to-end with zero setup:
-  data/metros.json
-  data/media_plan.json
-  data/categories.json
-  data/coefficients.json      (placeholder elasticities + synthetic scatter)
-  data/normals.json           (synthetic climatological day-of-year normals)
-  data/forecast_snapshot.json (offline fallback forecast)
+Produces *plausible*, deterministic, GLOBAL data so the app runs end-to-end with
+zero setup and zero network:
+  data/cities.json            (~120 cities worldwide: id, name, country, region, lat, lon, pop)
+  data/media_plan.json        (current spend weight + named buyer per city)
+  data/categories.json        (the product gallery — ~10 weather-sensitive lines)
+  data/coefficients.json      (placeholder elasticities + synthetic scatter per product)
+  data/normals.json           (synthetic climatological day-of-year normals per city)
+  data/forecast_snapshot.json (offline fallback forecast, keyed by city id)
 
 The REAL calibration of elasticity/r2/normals from historical data lives in
 scripts/calibrate.py and overwrites coefficients.json + normals.json. This
 script only exists so the demo never depends on a network call having run.
 
-Stdlib only — no numpy/pandas required.
+Stdlib only — no numpy/pandas required. Deterministic (seeded).
 """
 import json
 import math
@@ -28,112 +29,256 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
 os.makedirs(DATA, exist_ok=True)
 
-# name, state, lat, lon, population, tmax_mean(°C ann. avg daily high), tmax_amp(°C seasonal amplitude)
-METROS = [
-    ("New York", "NY", 40.71, -74.01, 18800000, 17.0, 12.5),
-    ("Los Angeles", "CA", 34.05, -118.24, 12500000, 24.0, 5.0),
-    ("Chicago", "IL", 41.88, -87.63, 9500000, 15.0, 15.0),
-    ("Houston", "TX", 29.76, -95.37, 7100000, 27.5, 9.0),
-    ("Phoenix", "AZ", 33.45, -112.07, 4900000, 31.0, 12.0),
-    ("Philadelphia", "PA", 39.95, -75.16, 6200000, 18.5, 13.0),
-    ("San Antonio", "TX", 29.42, -98.49, 2600000, 28.5, 9.5),
-    ("San Diego", "CA", 32.72, -117.16, 3300000, 22.0, 4.0),
-    ("Dallas", "TX", 32.78, -96.80, 7600000, 26.0, 12.0),
-    ("Atlanta", "GA", 33.75, -84.39, 6100000, 22.5, 10.0),
-    ("Seattle", "WA", 47.61, -122.33, 4000000, 16.0, 8.0),
-    ("Denver", "CO", 39.74, -104.99, 2960000, 18.0, 13.0),
-    ("Miami", "FL", 25.76, -80.19, 6200000, 29.0, 4.0),
-    ("Minneapolis", "MN", 44.98, -93.27, 3700000, 13.0, 16.5),
-    ("Boston", "MA", 42.36, -71.06, 4900000, 16.0, 13.0),
-    ("Detroit", "MI", 42.33, -83.05, 4300000, 15.0, 14.0),
-    ("Portland", "OR", 45.52, -122.68, 2500000, 18.0, 9.5),
-    ("Las Vegas", "NV", 36.17, -115.14, 2300000, 28.0, 13.5),
-    ("Charlotte", "NC", 35.23, -80.84, 2700000, 22.5, 11.0),
-    ("Nashville", "TN", 36.16, -86.78, 2000000, 22.0, 11.5),
-    ("Kansas City", "MO", 39.10, -94.58, 2200000, 19.0, 14.5),
-    ("St. Louis", "MO", 38.63, -90.20, 2800000, 20.0, 13.5),
-    ("Salt Lake City", "UT", 40.76, -111.89, 1250000, 18.0, 14.0),
-    ("Tampa", "FL", 27.95, -82.46, 3200000, 28.0, 5.0),
-    ("Orlando", "FL", 28.54, -81.38, 2700000, 29.0, 5.0),
-    ("Pittsburgh", "PA", 40.44, -79.996, 2300000, 16.5, 13.0),
-    ("Cincinnati", "OH", 39.10, -84.51, 2200000, 18.0, 13.5),
-    ("Cleveland", "OH", 41.50, -81.69, 2050000, 15.0, 13.5),
-    ("Indianapolis", "IN", 39.77, -86.16, 2050000, 17.0, 14.0),
-    ("Columbus", "OH", 39.96, -83.00, 2150000, 17.5, 13.5),
-    ("Milwaukee", "WI", 43.04, -87.91, 1570000, 13.5, 15.0),
-    ("Oklahoma City", "OK", 35.47, -97.52, 1400000, 23.0, 13.0),
-    ("New Orleans", "LA", 29.95, -90.07, 1270000, 27.0, 7.0),
-    ("Memphis", "TN", 35.15, -90.05, 1340000, 23.0, 12.0),
-    ("Raleigh", "NC", 35.78, -78.64, 1400000, 22.5, 11.0),
-    ("Sacramento", "CA", 38.58, -121.49, 2400000, 24.0, 9.5),
-    ("San Francisco", "CA", 37.77, -122.42, 4700000, 18.0, 3.0),
-    ("Albuquerque", "NM", 35.08, -106.65, 920000, 22.0, 13.0),
-    ("Austin", "TX", 30.27, -97.74, 2300000, 27.0, 10.0),
-    ("Jacksonville", "FL", 30.33, -81.66, 1600000, 27.0, 7.0),
-    ("Boise", "ID", 43.62, -116.20, 750000, 18.0, 14.5),
-    ("Omaha", "NE", 41.26, -95.93, 970000, 17.0, 15.5),
+# ---------------------------------------------------------------------------
+# Cities. (name, admin, country, cc, region, lat, lon, population, tmean, tamp)
+#   admin     : US state, else "" (subtitle falls back to country code)
+#   tmean     : annual-average daily-high °C
+#   tamp      : seasonal amplitude °C (≈ (summer high − winter high) / 2)
+# Northern/southern hemisphere phase is inferred from latitude sign.
+# ---------------------------------------------------------------------------
+US = "United States"
+NA, SA, EU, AF, ME, SAS, EAS, SEA, OC = (
+    "North America", "South America", "Europe", "Africa", "Middle East",
+    "South Asia", "East Asia", "Southeast Asia", "Oceania",
+)
+
+CITIES = [
+    # ---- United States (the flagship demo region) ----
+    ("New York", "NY", US, "US", NA, 40.71, -74.01, 18800000, 17.0, 12.5),
+    ("Los Angeles", "CA", US, "US", NA, 34.05, -118.24, 12500000, 24.0, 5.0),
+    ("Chicago", "IL", US, "US", NA, 41.88, -87.63, 9500000, 15.0, 15.0),
+    ("Houston", "TX", US, "US", NA, 29.76, -95.37, 7100000, 27.5, 9.0),
+    ("Phoenix", "AZ", US, "US", NA, 33.45, -112.07, 4900000, 31.0, 12.0),
+    ("Philadelphia", "PA", US, "US", NA, 39.95, -75.16, 6200000, 18.5, 13.0),
+    ("San Antonio", "TX", US, "US", NA, 29.42, -98.49, 2600000, 28.5, 9.5),
+    ("San Diego", "CA", US, "US", NA, 32.72, -117.16, 3300000, 22.0, 4.0),
+    ("Dallas", "TX", US, "US", NA, 32.78, -96.80, 7600000, 26.0, 12.0),
+    ("Atlanta", "GA", US, "US", NA, 33.75, -84.39, 6100000, 22.5, 10.0),
+    ("Seattle", "WA", US, "US", NA, 47.61, -122.33, 4000000, 16.0, 8.0),
+    ("Denver", "CO", US, "US", NA, 39.74, -104.99, 2960000, 18.0, 13.0),
+    ("Miami", "FL", US, "US", NA, 25.76, -80.19, 6200000, 29.0, 4.0),
+    ("Minneapolis", "MN", US, "US", NA, 44.98, -93.27, 3700000, 13.0, 16.5),
+    ("Boston", "MA", US, "US", NA, 42.36, -71.06, 4900000, 16.0, 13.0),
+    ("Detroit", "MI", US, "US", NA, 42.33, -83.05, 4300000, 15.0, 14.0),
+    ("Portland", "OR", US, "US", NA, 45.52, -122.68, 2500000, 18.0, 9.5),
+    ("Las Vegas", "NV", US, "US", NA, 36.17, -115.14, 2300000, 28.0, 13.5),
+    ("Charlotte", "NC", US, "US", NA, 35.23, -80.84, 2700000, 22.5, 11.0),
+    ("Nashville", "TN", US, "US", NA, 36.16, -86.78, 2000000, 22.0, 11.5),
+    ("Kansas City", "MO", US, "US", NA, 39.10, -94.58, 2200000, 19.0, 14.5),
+    ("St. Louis", "MO", US, "US", NA, 38.63, -90.20, 2800000, 20.0, 13.5),
+    ("Salt Lake City", "UT", US, "US", NA, 40.76, -111.89, 1250000, 18.0, 14.0),
+    ("Tampa", "FL", US, "US", NA, 27.95, -82.46, 3200000, 28.0, 5.0),
+    ("Orlando", "FL", US, "US", NA, 28.54, -81.38, 2700000, 29.0, 5.0),
+    ("Pittsburgh", "PA", US, "US", NA, 40.44, -79.996, 2300000, 16.5, 13.0),
+    ("Cincinnati", "OH", US, "US", NA, 39.10, -84.51, 2200000, 18.0, 13.5),
+    ("Cleveland", "OH", US, "US", NA, 41.50, -81.69, 2050000, 15.0, 13.5),
+    ("Indianapolis", "IN", US, "US", NA, 39.77, -86.16, 2050000, 17.0, 14.0),
+    ("Columbus", "OH", US, "US", NA, 39.96, -83.00, 2150000, 17.5, 13.5),
+    ("Milwaukee", "WI", US, "US", NA, 43.04, -87.91, 1570000, 13.5, 15.0),
+    ("Oklahoma City", "OK", US, "US", NA, 35.47, -97.52, 1400000, 23.0, 13.0),
+    ("New Orleans", "LA", US, "US", NA, 29.95, -90.07, 1270000, 27.0, 7.0),
+    ("Memphis", "TN", US, "US", NA, 35.15, -90.05, 1340000, 23.0, 12.0),
+    ("Raleigh", "NC", US, "US", NA, 35.78, -78.64, 1400000, 22.5, 11.0),
+    ("Sacramento", "CA", US, "US", NA, 38.58, -121.49, 2400000, 24.0, 9.5),
+    ("San Francisco", "CA", US, "US", NA, 37.77, -122.42, 4700000, 18.0, 3.0),
+    ("Albuquerque", "NM", US, "US", NA, 35.08, -106.65, 920000, 22.0, 13.0),
+    ("Austin", "TX", US, "US", NA, 30.27, -97.74, 2300000, 27.0, 10.0),
+    ("Jacksonville", "FL", US, "US", NA, 30.33, -81.66, 1600000, 27.0, 7.0),
+    ("Boise", "ID", US, "US", NA, 43.62, -116.20, 750000, 18.0, 14.5),
+    ("Omaha", "NE", US, "US", NA, 41.26, -95.93, 970000, 17.0, 15.5),
+    # ---- North America (non-US) ----
+    ("Toronto", "", "Canada", "CA", NA, 43.65, -79.38, 6200000, 12.5, 14.5),
+    ("Vancouver", "", "Canada", "CA", NA, 49.28, -123.12, 2600000, 13.5, 8.0),
+    ("Montreal", "", "Canada", "CA", NA, 45.50, -73.57, 4200000, 11.0, 16.0),
+    ("Mexico City", "", "Mexico", "MX", NA, 19.43, -99.13, 21800000, 24.0, 4.0),
+    ("Guadalajara", "", "Mexico", "MX", NA, 20.67, -103.35, 5200000, 27.0, 5.0),
+    ("Monterrey", "", "Mexico", "MX", NA, 25.69, -100.32, 4700000, 28.0, 9.0),
+    # ---- South America ----
+    ("São Paulo", "", "Brazil", "BR", SA, -23.55, -46.63, 22000000, 25.0, 4.5),
+    ("Rio de Janeiro", "", "Brazil", "BR", SA, -22.91, -43.17, 13500000, 28.0, 4.0),
+    ("Buenos Aires", "", "Argentina", "AR", SA, -34.60, -58.38, 15000000, 22.5, 8.0),
+    ("Santiago", "", "Chile", "CL", SA, -33.45, -70.67, 7000000, 22.0, 8.5),
+    ("Lima", "", "Peru", "PE", SA, -12.05, -77.04, 11000000, 23.0, 4.0),
+    ("Bogotá", "", "Colombia", "CO", SA, 4.71, -74.07, 11000000, 19.5, 1.0),
+    ("Caracas", "", "Venezuela", "VE", SA, 10.48, -66.90, 2900000, 27.0, 1.5),
+    # ---- Europe ----
+    ("London", "", "United Kingdom", "GB", EU, 51.51, -0.13, 9500000, 15.0, 8.5),
+    ("Paris", "", "France", "FR", EU, 48.86, 2.35, 11000000, 16.0, 9.5),
+    ("Berlin", "", "Germany", "DE", EU, 52.52, 13.41, 4500000, 14.0, 11.0),
+    ("Madrid", "", "Spain", "ES", EU, 40.42, -3.70, 6700000, 21.0, 11.0),
+    ("Barcelona", "", "Spain", "ES", EU, 41.39, 2.17, 5600000, 21.0, 8.0),
+    ("Rome", "", "Italy", "IT", EU, 41.90, 12.50, 4300000, 21.0, 9.0),
+    ("Milan", "", "Italy", "IT", EU, 45.46, 9.19, 3200000, 18.0, 11.0),
+    ("Amsterdam", "", "Netherlands", "NL", EU, 52.37, 4.90, 2500000, 14.0, 9.0),
+    ("Vienna", "", "Austria", "AT", EU, 48.21, 16.37, 2800000, 15.0, 11.0),
+    ("Zurich", "", "Switzerland", "CH", EU, 47.37, 8.54, 1400000, 14.5, 10.5),
+    ("Munich", "", "Germany", "DE", EU, 48.14, 11.58, 2600000, 14.0, 11.0),
+    ("Warsaw", "", "Poland", "PL", EU, 52.23, 21.01, 3100000, 13.5, 12.5),
+    ("Prague", "", "Czechia", "CZ", EU, 50.08, 14.44, 2700000, 13.5, 11.5),
+    ("Stockholm", "", "Sweden", "SE", EU, 59.33, 18.07, 2400000, 10.5, 11.5),
+    ("Oslo", "", "Norway", "NO", EU, 59.91, 10.75, 1700000, 9.5, 11.0),
+    ("Copenhagen", "", "Denmark", "DK", EU, 55.68, 12.57, 2100000, 11.5, 9.5),
+    ("Helsinki", "", "Finland", "FI", EU, 60.17, 24.94, 1500000, 9.0, 12.0),
+    ("Dublin", "", "Ireland", "IE", EU, 53.35, -6.26, 2000000, 13.0, 6.5),
+    ("Lisbon", "", "Portugal", "PT", EU, 38.72, -9.14, 3000000, 21.0, 7.0),
+    ("Athens", "", "Greece", "GR", EU, 37.98, 23.73, 3800000, 23.0, 9.5),
+    ("Istanbul", "", "Türkiye", "TR", EU, 41.01, 28.98, 15500000, 18.0, 9.5),
+    ("Moscow", "", "Russia", "RU", EU, 55.75, 37.62, 12600000, 10.0, 14.5),
+    ("Kyiv", "", "Ukraine", "UA", EU, 50.45, 30.52, 3000000, 13.0, 13.0),
+    # ---- Middle East & Africa ----
+    ("Dubai", "", "United Arab Emirates", "AE", ME, 25.20, 55.27, 3500000, 33.0, 8.0),
+    ("Riyadh", "", "Saudi Arabia", "SA", ME, 24.71, 46.68, 7600000, 33.0, 10.0),
+    ("Tel Aviv", "", "Israel", "IL", ME, 32.08, 34.78, 4000000, 25.0, 7.0),
+    ("Cairo", "", "Egypt", "EG", AF, 30.04, 31.24, 21300000, 28.0, 8.0),
+    ("Lagos", "", "Nigeria", "NG", AF, 6.52, 3.38, 15400000, 31.0, 2.0),
+    ("Nairobi", "", "Kenya", "KE", AF, -1.29, 36.82, 4900000, 24.0, 2.0),
+    ("Johannesburg", "", "South Africa", "ZA", AF, -26.20, 28.05, 6000000, 22.0, 4.5),
+    ("Cape Town", "", "South Africa", "ZA", AF, -33.92, 18.42, 4600000, 21.0, 5.0),
+    ("Casablanca", "", "Morocco", "MA", AF, 33.57, -7.59, 3700000, 22.0, 5.5),
+    ("Accra", "", "Ghana", "GH", AF, 5.60, -0.19, 2500000, 31.0, 1.5),
+    ("Addis Ababa", "", "Ethiopia", "ET", AF, 9.01, 38.76, 5000000, 23.0, 2.0),
+    # ---- South Asia ----
+    ("Mumbai", "", "India", "IN", SAS, 19.08, 72.88, 21000000, 32.0, 3.0),
+    ("Delhi", "", "India", "IN", SAS, 28.61, 77.21, 32000000, 32.0, 8.0),
+    ("Bengaluru", "", "India", "IN", SAS, 12.97, 77.59, 13000000, 29.0, 3.0),
+    ("Chennai", "", "India", "IN", SAS, 13.08, 80.27, 11000000, 33.0, 3.0),
+    ("Karachi", "", "Pakistan", "PK", SAS, 24.86, 67.01, 16000000, 32.0, 5.0),
+    ("Dhaka", "", "Bangladesh", "BD", SAS, 23.81, 90.41, 22000000, 31.0, 4.0),
+    ("Colombo", "", "Sri Lanka", "LK", SAS, 6.93, 79.86, 5600000, 30.0, 1.5),
+    # ---- East Asia ----
+    ("Tokyo", "", "Japan", "JP", EAS, 35.68, 139.69, 37000000, 19.0, 11.0),
+    ("Osaka", "", "Japan", "JP", EAS, 34.69, 135.50, 19000000, 20.0, 11.0),
+    ("Seoul", "", "South Korea", "KR", EAS, 37.57, 126.98, 9700000, 17.0, 14.0),
+    ("Beijing", "", "China", "CN", EAS, 39.90, 116.41, 21500000, 18.0, 15.0),
+    ("Shanghai", "", "China", "CN", EAS, 31.23, 121.47, 27000000, 21.0, 11.0),
+    ("Guangzhou", "", "China", "CN", EAS, 23.13, 113.26, 18700000, 27.0, 6.5),
+    ("Shenzhen", "", "China", "CN", EAS, 22.54, 114.06, 17500000, 27.0, 6.0),
+    ("Hong Kong", "", "Hong Kong", "HK", EAS, 22.32, 114.17, 7500000, 26.0, 6.0),
+    ("Taipei", "", "Taiwan", "TW", EAS, 25.03, 121.57, 7000000, 27.0, 7.0),
+    # ---- Southeast Asia ----
+    ("Bangkok", "", "Thailand", "TH", SEA, 13.76, 100.50, 10700000, 33.0, 2.5),
+    ("Singapore", "", "Singapore", "SG", SEA, 1.35, 103.82, 5900000, 31.0, 1.0),
+    ("Jakarta", "", "Indonesia", "ID", SEA, -6.21, 106.85, 11000000, 32.0, 1.5),
+    ("Kuala Lumpur", "", "Malaysia", "MY", SEA, 3.14, 101.69, 8000000, 32.0, 1.0),
+    ("Manila", "", "Philippines", "PH", SEA, 14.60, 120.98, 13900000, 32.0, 2.5),
+    ("Ho Chi Minh City", "", "Vietnam", "VN", SEA, 10.82, 106.63, 9000000, 33.0, 2.5),
+    ("Hanoi", "", "Vietnam", "VN", SEA, 21.03, 105.85, 8000000, 28.0, 7.0),
+    # ---- Oceania ----
+    ("Sydney", "", "Australia", "AU", OC, -33.87, 151.21, 5300000, 22.5, 5.0),
+    ("Melbourne", "", "Australia", "AU", OC, -37.81, 144.96, 5100000, 20.0, 6.0),
+    ("Brisbane", "", "Australia", "AU", OC, -27.47, 153.03, 2600000, 26.0, 4.5),
+    ("Perth", "", "Australia", "AU", OC, -31.95, 115.86, 2100000, 24.5, 7.0),
+    ("Auckland", "", "New Zealand", "NZ", OC, -36.85, 174.76, 1700000, 19.0, 4.5),
 ]
 
-# Buyer roster — assigned deterministically per metro.
+# Buyer roster — assigned deterministically per city.
 FIRST = ["Jordan", "Priya", "Marcus", "Elena", "Devon", "Sofia", "Aaron", "Maya",
          "Liam", "Nadia", "Theo", "Grace", "Omar", "Ruth", "Cole", "Ines",
-         "Felix", "Dana", "Hugo", "Lena", "Sam", "Tara"]
+         "Felix", "Dana", "Hugo", "Lena", "Sam", "Tara", "Yuki", "Aria",
+         "Mateo", "Noor", "Kai", "Zara"]
 LAST = ["Reyes", "Okafor", "Bauer", "Nguyen", "Castellano", "Mbeki", "Walsh",
-        "Petrova", "Kane", "Haddad", "Lindqvist", "Osei", "Romano", "Fischer"]
+        "Petrova", "Kane", "Haddad", "Lindqvist", "Osei", "Romano", "Fischer",
+        "Tanaka", "Silva", "Khan", "Park"]
 
 
-def doy_normal(tmax_mean, tmax_amp, doy):
+def cid(name, cc):
+    base = name.lower().replace(" ", "_").replace(".", "").replace("ã", "a").replace("é", "e").replace("ü", "u").replace("ç", "c")
+    return f"{base}_{cc.lower()}"
+
+
+def doy_normal(tmean, tamp, lat, doy):
     """Synthetic climatological daily-max normal for a day-of-year (1..366).
-    Peak ~ July 22 (doy 203). Small smooth wobble for realism."""
-    phase = 2 * math.pi * (doy - 203) / 365.25
-    base = tmax_mean + tmax_amp * math.cos(phase)
-    wobble = 0.6 * math.sin(2 * math.pi * doy / 18.0)  # gentle sub-seasonal texture
+    Northern hemisphere peaks ~ July 22 (doy 203); southern flips by half a year.
+    A gentle sub-seasonal wobble adds texture."""
+    peak = 203 if lat >= 0 else 203 - 182  # ≈ Jan 21 in the south
+    phase = 2 * math.pi * (doy - peak) / 365.25
+    base = tmean + tamp * math.cos(phase)
+    wobble = 0.6 * math.sin(2 * math.pi * doy / 18.0)
     return round(base + wobble, 2)
 
 
-def build_metros_and_plan():
-    metros = []
+def build_cities_and_plan():
+    cities = []
     plan = {}
-    # Misaligned media plan: over-weight cool/coastal, under-weight hot interior,
-    # so the diagnosis layer surfaces real gaps in summer.
     raw = {}
-    for i, (name, st, lat, lon, pop, tmean, tamp) in enumerate(METROS):
-        mid = name.lower().replace(" ", "_").replace(".", "")
-        metros.append({
-            "id": mid, "name": name, "state": st,
+    for i, (name, admin, country, cc, region, lat, lon, pop, tmean, tamp) in enumerate(CITIES):
+        cid_ = cid(name, cc)
+        cities.append({
+            "id": cid_, "name": name,
+            "state": admin or cc, "country": country, "cc": cc, "region": region,
             "lat": lat, "lon": lon, "population": pop,
         })
-        # cool bias: cooler annual-high metros get a heavier (deliberately wrong) weight
+        # Deliberately mis-aligned plan: over-weight cooler markets, under-weight
+        # hot ones, so the diagnosis layer surfaces real summer gaps.
         cool_bias = max(0.45, min(1.9, 1.7 - (tmean - 15.0) / 18.0))
-        raw[mid] = (pop ** 0.6) * cool_bias
+        raw[cid_] = (pop ** 0.6) * cool_bias
     total = sum(raw.values())
-    for i, (name, st, lat, lon, pop, tmean, tamp) in enumerate(METROS):
-        mid = name.lower().replace(" ", "_").replace(".", "")
-        buyer = f"{FIRST[i % len(FIRST)]} {LAST[i % len(LAST)]}"
-        plan[mid] = {
-            "current_weight": round(raw[mid] / total, 5),
-            "buyer_name": buyer,
-            "buyer_handle": "@" + FIRST[i % len(FIRST)].lower(),
+    for i, (name, admin, country, cc, region, lat, lon, pop, tmean, tamp) in enumerate(CITIES):
+        cid_ = cid(name, cc)
+        first = FIRST[i % len(FIRST)]
+        plan[cid_] = {
+            "current_weight": round(raw[cid_] / total, 6),
+            "buyer_name": f"{first} {LAST[i % len(LAST)]}",
+            "buyer_handle": "@" + first.lower(),
         }
-    # re-normalise weights to exactly 1.0 (rounding drift)
     s = sum(p["current_weight"] for p in plan.values())
     for p in plan.values():
-        p["current_weight"] = round(p["current_weight"] / s, 5)
-    return metros, plan
+        p["current_weight"] = round(p["current_weight"] / s, 6)
+    return cities, plan
 
 
 def build_normals():
     normals = {}
-    for (name, st, lat, lon, pop, tmean, tamp) in METROS:
-        mid = name.lower().replace(" ", "_").replace(".", "")
-        normals[mid] = {
-            "temperature_2m_max": [doy_normal(tmean, tamp, d) for d in range(1, 367)]
+    for (name, admin, country, cc, region, lat, lon, pop, tmean, tamp) in CITIES:
+        normals[cid(name, cc)] = {
+            "temperature_2m_max": [doy_normal(tmean, tamp, lat, d) for d in range(1, 367)]
         }
     return normals
 
 
+# ---------------------------------------------------------------------------
+# Product gallery. Each line is weather-sensitive with a real-world proxy article.
+# elasticity = % demand change per +1°C anomaly; sign encodes the response.
+# Accents are flat riso inks — warm orange family for heat-driven lines, blue
+# family for cold-comfort lines (a couple of off-hues for gallery variety).
+# ---------------------------------------------------------------------------
+PRODUCTS = [
+    # id, label, proxy, elasticity, r2, accent, icon, tagline, creative_angle
+    ("ice_cream", "Ice Cream", "Ice_cream", 1.84, 0.68, "#ff5a1f", "🍦",
+     "Demand climbs fast as heat departs above normal — peak impulse category.",
+     "Lean into the heat: \"Beat the {temp_f}° spike.\" Push chilled, on-the-go impulse occasions; day-part toward the afternoon peak."),
+    ("sunscreen", "Sunscreen", "Sunscreen", 1.55, 0.62, "#ff8a1f", "🧴",
+     "Sun-protection demand spikes with hotter, brighter-than-normal days.",
+     "Sell preparedness: \"{temp_f}° and climbing — cover up.\" Lead with UV/outdoor occasions and same-day pickup."),
+    ("lemonade", "Lemonade", "Lemonade", 1.70, 0.58, "#ffc21f", "🍋",
+     "Thirst-quench demand rises sharply when it runs hotter than normal.",
+     "Refreshment cue: \"Cool the {temp_f}°.\" Push grab-and-go, picnic and patio occasions."),
+    ("iced_coffee", "Iced Coffee", "Iced_coffee", 1.35, 0.51, "#c8702a", "🧋",
+     "Cold-brew interest tracks heat departures above the local normal.",
+     "Swap the cue from warm to cold: \"Iced, for the {temp_f}° afternoon.\" Morning + commute day-parts."),
+    ("sports_drink", "Sports Drink", "Sports_drink", 1.15, 0.47, "#ff5a7a", "🥤",
+     "Hydration demand lifts with above-normal heat and activity.",
+     "Performance + replenishment: \"Out-sweat the {temp_f}°.\" Gym, field and outdoor-work occasions."),
+    ("air_conditioning", "Air Conditioning", "Air_conditioning", 2.05, 0.71, "#e23a1f", "❄️",
+     "Cooling demand surges hardest of all when heat departs above normal.",
+     "Urgency + relief: \"{temp_f}° inside is optional.\" Push installation/units and same-week service windows."),
+    ("soup", "Soup", "Soup", -1.46, 0.55, "#2436d4", "🥣",
+     "Comfort demand rises when it turns colder than the local normal.",
+     "Sell warmth: \"When it turns, we're ready.\" Evening and weekend dwell-time, cozy at-home messaging."),
+    ("hot_chocolate", "Hot Chocolate", "Hot_chocolate", -1.62, 0.60, "#1f5fd4", "☕",
+     "Hot-drink demand climbs as temperatures fall below normal.",
+     "Cosy occasion: \"Colder than usual — warm up.\" Family, after-school and weekend-treat moments."),
+    ("tea", "Tea", "Tea", -1.05, 0.44, "#2a8fb8", "🍵",
+     "Tea interest lifts modestly when it runs cooler than normal.",
+     "Everyday comfort: \"A cooler-than-usual day calls for it.\" Morning and evening rituals."),
+    ("slow_cooker", "Slow Cooker", "Slow_cooker", -1.30, 0.50, "#4b3fd4", "🍲",
+     "Hearty-cooking demand rises on colder-than-normal stretches.",
+     "Plan-ahead comfort: \"Set it for the cold snap.\" Weekend grocery + meal-prep occasions."),
+]
+
+
 def synth_scatter(elasticity, r2, n=150, xspread=8.0):
-    """Generate (anomaly, residual) points whose OLS fit ~ elasticity with ~r2."""
+    """(anomaly, residual) points whose OLS fit ~ elasticity with roughly r2."""
     sig_var = (elasticity ** 2) * (xspread ** 2)
     noise_var = sig_var * (1 - r2) / max(r2, 1e-6)
     noise_sd = math.sqrt(noise_var)
@@ -146,109 +291,87 @@ def synth_scatter(elasticity, r2, n=150, xspread=8.0):
 
 
 def build_coefficients():
+    cats = {}
+    for (pid, label, proxy, e, r2, accent, icon, tag, ang) in PRODUCTS:
+        cats[pid] = {
+            "label": label,
+            "proxy_article": proxy,
+            "driver": "temperature_2m_max",
+            "elasticity": e,
+            "r2": r2,
+            "direction": "positive" if e >= 0 else "negative",
+            "n_days": 1825,
+            "scatter": synth_scatter(e, r2),
+        }
     return {
         "generated_at": date.today().isoformat(),
         "note": "SEED data from gen_demo_data.py. Run scripts/calibrate.py to replace with real calibrated values.",
-        "categories": {
-            "cold_refreshment": {
-                "label": "Cold Refreshment",
-                "proxy_article": "Ice_cream",
-                "driver": "temperature_2m_max",
-                "elasticity": 1.84,
-                "r2": 0.68,
-                "direction": "positive",
-                "n_days": 1825,
-                "scatter": synth_scatter(1.84, 0.68),
-            },
-            "warm_comfort": {
-                "label": "Warm Comfort",
-                "proxy_article": "Soup",
-                "driver": "temperature_2m_max",
-                "elasticity": -1.46,
-                "r2": 0.55,
-                "direction": "negative",
-                "n_days": 1825,
-                "scatter": synth_scatter(-1.46, 0.55),
-            },
-        },
+        "categories": cats,
     }
 
 
 def build_categories():
-    return {
-        "cold_refreshment": {
-            "id": "cold_refreshment",
-            "label": "Cold Refreshment",
-            "tagline": "Ice cream, cold brew, sparkling — demand climbs as heat departs above normal.",
-            "creative_angle": "Lean into the heat: \"Beat the {temp_f}° spike.\" Push chilled, on-the-go, impulse occasions. Day-part toward afternoon peak.",
-            "accent": "#e4572e",
-            "icon": "☀️",
-        },
-        "warm_comfort": {
-            "id": "warm_comfort",
-            "label": "Warm Comfort",
-            "tagline": "Soup, hot drinks, comfort food — demand rises when it turns colder than normal.",
-            "creative_angle": "Sell warmth and comfort: \"When it turns, we're ready.\" Evening and weekend dwell-time occasions, cozy at-home messaging.",
-            "accent": "#2e86ab",
-            "icon": "🍵",
-        },
-    }
+    cats = {}
+    for (pid, label, proxy, e, r2, accent, icon, tag, ang) in PRODUCTS:
+        cats[pid] = {
+            "id": pid,
+            "label": label,
+            "group": "positive" if e >= 0 else "negative",
+            "tagline": tag,
+            "creative_angle": ang,
+            "accent": accent,
+            "icon": icon,
+        }
+    return cats
 
 
 def build_forecast_snapshot(normals):
-    """Offline fallback. Mirrors Open-Meteo batched response shape: an array,
-    one object per coordinate, with .daily.{time,temperature_2m_max,precipitation_sum}.
-    Built from normals + a smooth synthetic heat front sweeping west→east so the
-    demo map is visibly alive even with no network."""
+    """Offline fallback, keyed by city id. Built from normals + smooth synthetic
+    fronts (travelling warm/cool bands) so any region of the globe looks alive
+    even with no network."""
     start = date.today()
     days = 7
     dates = [(start + timedelta(days=k)).isoformat() for k in range(days)]
     doy0 = start.timetuple().tm_yday
-    arr = []
-    for (name, st, lat, lon, pop, tmean, tamp) in METROS:
-        mid = name.lower().replace(" ", "_").replace(".", "")
-        tmax = []
-        precip = []
+    by_id = {}
+    for (name, admin, country, cc, region, lat, lon, pop, tmean, tamp) in CITIES:
+        cid_ = cid(name, cc)
+        tmax, precip = [], []
+        rlon, rlat = math.radians(lon), math.radians(lat)
         for k in range(days):
             doy = ((doy0 - 1 + k) % 366) + 1
-            base = normals[mid]["temperature_2m_max"][doy - 1]
-            # Heat front: a warm anomaly bulge that moves eastward each day.
-            # front longitude marches from ~ -120 to ~ -70 across the week.
-            front_lon = -122 + (52.0 / (days - 1)) * k
-            dist = abs(lon - front_lon)
-            anom = 7.0 * math.exp(-(dist ** 2) / (2 * 9.0 ** 2))  # +°C near the front
-            anom -= 2.0 * math.exp(-((lon - (front_lon - 22)) ** 2) / (2 * 9.0 ** 2))  # cool behind
+            base = normals[cid_]["temperature_2m_max"][doy - 1]
+            # Travelling warm/cool fronts: two sinusoids that march each day.
+            anom = (5.5 * math.sin(rlon + 0.9 * k) * math.cos(rlat * 1.2)
+                    + 2.5 * math.sin(rlat * 2.0 - 0.5 * k))
             t = base + anom + random.gauss(0, 0.6)
             tmax.append(round(t, 1))
-            precip.append(round(max(0.0, random.gauss(1.2, 2.0)) if anom < 0 else max(0.0, random.gauss(0.4, 1.0)), 1))
-        arr.append({
-            "latitude": lat, "longitude": lon,
-            "timezone": "auto",
-            "daily": {
-                "time": dates,
-                "temperature_2m_max": tmax,
-                "precipitation_sum": precip,
-            },
-        })
-    return {"generated_at": start.isoformat(), "source": "synthetic_snapshot", "metros": arr}
+            precip.append(round(max(0.0, random.gauss(1.2, 2.0)) if anom < 0
+                                else max(0.0, random.gauss(0.4, 1.0)), 1))
+        by_id[cid_] = {
+            "time": dates,
+            "temperature_2m_max": tmax,
+            "precipitation_sum": precip,
+        }
+    return {"generated_at": start.isoformat(), "source": "synthetic_snapshot", "byId": by_id}
 
 
 def main():
-    metros, plan = build_metros_and_plan()
+    cities, plan = build_cities_and_plan()
     normals = build_normals()
-    write("metros.json", metros)
+    write("cities.json", cities)
     write("media_plan.json", plan)
     write("categories.json", build_categories())
     write("coefficients.json", build_coefficients())
     write("normals.json", normals)
     write("forecast_snapshot.json", build_forecast_snapshot(normals))
-    print(f"Wrote demo data for {len(metros)} metros to {DATA}")
+    print(f"Wrote demo data for {len(cities)} cities, {len(PRODUCTS)} products to {DATA}")
 
 
 def write(name, obj):
     path = os.path.join(DATA, name)
     with open(path, "w") as f:
-        json.dump(obj, f, separators=(",", ":"))
+        json.dump(obj, f, separators=(",", ":"), ensure_ascii=False)
     print(f"  {name}  ({os.path.getsize(path)//1024} KB)")
 
 

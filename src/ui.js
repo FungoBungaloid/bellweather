@@ -1,7 +1,7 @@
 // ui.js — progressive-disclosure widgets: evidence scatter, reallocation table,
 // drawer, and a tiny markdown renderer for the brief.
-import { d3 } from "../vendor/libs.js?v=2";
-import { usd, pct } from "./action.js?v=2";
+import { d3 } from "../vendor/libs.js?v=3";
+import { usd, pct } from "./action.js?v=3";
 
 // --- tiny, safe-enough markdown (headings, bold, italics, lists, hr) ---
 export function md(src) {
@@ -45,29 +45,30 @@ export function renderScatter(svgEl, category) {
   const x = d3.scaleLinear().domain([-xmax, xmax]).range([pad, W - 8]);
   const y = d3.scaleLinear().domain([-ymax, ymax]).range([H - pad, 8]);
 
+  const INK = "#1a1714", MUTED = "#6b6354", MONO = "'Space Mono', ui-monospace, monospace";
   // axes (zero lines)
   svg.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", 8).attr("y2", H - pad)
-    .attr("stroke", "#cbd2dc");
+    .attr("stroke", INK).attr("stroke-opacity", 0.3);
   svg.append("line").attr("x1", pad).attr("x2", W - 8).attr("y1", y(0)).attr("y2", y(0))
-    .attr("stroke", "#cbd2dc");
+    .attr("stroke", INK).attr("stroke-opacity", 0.3);
 
   svg.selectAll("circle").data(pts).join("circle")
     .attr("cx", (d) => x(d[0])).attr("cy", (d) => y(d[1])).attr("r", 2.6)
-    .attr("fill", category.accent || "#e4572e").attr("opacity", 0.5);
+    .attr("fill", category.accent || "#ff5a1f").attr("opacity", 0.6);
 
   // fit line through origin-ish using stored elasticity
   const e = category.elasticity;
   svg.append("line")
     .attr("x1", x(-xmax)).attr("y1", y(-xmax * e))
     .attr("x2", x(xmax)).attr("y2", y(xmax * e))
-    .attr("stroke", "#1a2030").attr("stroke-width", 2);
+    .attr("stroke", INK).attr("stroke-width", 2.5);
 
   svg.append("text").attr("x", W - 10).attr("y", H - 8).attr("text-anchor", "end")
-    .attr("font-size", 11).attr("fill", "#5a6473").text("temp anomaly (°C) →");
-  svg.append("text").attr("x", 10).attr("y", 16).attr("font-size", 11)
-    .attr("fill", "#5a6473").text("demand residual (%)");
+    .attr("font-size", 10).attr("font-family", MONO).attr("fill", MUTED).text("temp anomaly (°C) →");
+  svg.append("text").attr("x", 10).attr("y", 16).attr("font-size", 10)
+    .attr("font-family", MONO).attr("fill", MUTED).text("demand residual (%)");
   svg.append("text").attr("x", pad + 4).attr("y", 22)
-    .attr("font-size", 15).attr("font-weight", 700).attr("fill", "#1a2030")
+    .attr("font-size", 14).attr("font-weight", 700).attr("font-family", MONO).attr("fill", INK)
     .text(`r² = ${category.r2}   ·   ${category.elasticity} %/°C`);
 }
 
@@ -100,7 +101,7 @@ export function reallocTable(diag) {
     : `<div class="move">Shift <b>${usd(diag.reallocation)}</b> into <span class="pos">${h.name}</span></div>`;
   return `${move}
     <table class="realloc">
-      <thead><tr><th>Metro</th><th>Demand</th><th>Now</th><th>Implied</th><th>Move</th><th></th></tr></thead>
+      <thead><tr><th>Market</th><th>Demand</th><th>Now</th><th>Implied</th><th>Move</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -119,7 +120,7 @@ export function tickerHTML(diag, catLabel) {
     const amt = (up ? "+" : "−") + "$" + Math.abs(Math.round(r.dollars / 1000)) + "K";
     return `<span class="tk ${cls}"><span class="arr">${arrow}</span> <b>${r.name.toUpperCase()}</b> ${pct(r.value)} · ${amt}</span>`;
   });
-  const lead = `<span class="tk lead">${catLabel.toUpperCase()} · REALLOCATION TICKER</span>`;
+  const lead = `<span class="tk lead">${catLabel.toUpperCase()} · DEMAND vs PLAN</span>`;
   // duplicate for a seamless marquee loop
   const seq = [lead, ...parts].join(`<span class="tk sep">◆</span>`);
   return seq + `<span class="tk sep">◆</span>` + seq + `<span class="tk sep">◆</span>`;

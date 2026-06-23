@@ -14,6 +14,13 @@ export const CONFIG = {
   gridY: 70, // IDW grid rows
   idwPower: 2.2,
 
+  // Globe → region lock-in. When you aim the globe and lock, we take every
+  // curated city within `lockRadiusDeg` great-circle degrees of the centre,
+  // clamped between min/max so the regional map is always legible.
+  lockRadiusDeg: 38,
+  minRegionCities: 8,
+  maxRegionCities: 22,
+
   // Contour thresholds (% demand departure from normal), symmetric around 0.
   thresholds: [-40, -30, -22, -16, -11, -7, -4, 4, 7, 11, 16, 22, 30, 40],
   frontThreshold: 4, // the "demand front": where normal crosses into surge
@@ -32,6 +39,16 @@ export const CONFIG = {
 
   // Live forecast endpoint (keyless, CORS-OK).
   forecastEndpoint: "https://api.open-meteo.com/v1/forecast",
+};
+
+// Riso poster palette — kept in JS because SVG presentation attributes don't
+// resolve CSS var(). Mirror these in the :root custom properties in index.html.
+export const PALETTE = {
+  paper: "#f4ecd8",
+  paper2: "#e7dbbd",
+  ink: "#1a1714",
+  blue: "#2436d4",
+  orange: "#ff5a1f",
 };
 
 // Day-of-week labels for headlines ("Thu").

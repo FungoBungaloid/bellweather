@@ -6,13 +6,22 @@
 //   dollars       : move * flightBudget
 //
 // Deterministic: same field -> same ranking. No randomness.
-import { CONFIG, DOW } from "./config.js?v=2";
+import { CONFIG, DOW } from "./config.js?v=3";
 
 const relu = (x) => (x > 0 ? x : 0);
 
-// field: array of metro points (from model.demandField) for the headline day.
+// field: array of city points (from model.demandField) for the headline day.
 // mediaPlan: { id: { current_weight, buyer_name, buyer_handle } }
 export function diagnose(field, mediaPlan, dayIndex, dates) {
+  // Renormalise the brand's current weights WITHIN this locked region so the
+  // flight budget is treated as 100% of the region's spend, whatever subset of
+  // cities the globe locked onto.
+  let cwSum = 0;
+  field.forEach((p) => { cwSum += (mediaPlan[p.id] && mediaPlan[p.id].current_weight) || 0; });
+  const curWeight = (id) => {
+    const w = (mediaPlan[id] && mediaPlan[id].current_weight) || 0;
+    return cwSum > 1e-9 ? w / cwSum : 1 / field.length;
+  };
   // metro value: dampened population share (so big gaps in big markets rank up,
   // without NYC swamping everything).
   const valRaw = {};
@@ -34,7 +43,7 @@ export function diagnose(field, mediaPlan, dayIndex, dates) {
   const allFlat = rawSum < 1e-9;
 
   const rows = field.map((p) => {
-    const cw = (mediaPlan[p.id] && mediaPlan[p.id].current_weight) || 0;
+    const cw = curWeight(p.id);
     const tw = allFlat ? value(p.id) : raw[p.id] / rawSum;
     const move = tw - cw; // + => add budget, - => cut budget
     const dollars = move * CONFIG.flightBudget;

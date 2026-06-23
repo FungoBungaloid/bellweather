@@ -9,10 +9,10 @@ function dayOfYear(iso) {
   return Math.floor((d - start) / 86400000); // 1..366
 }
 
-// Per-metro point field for one category + one (possibly fractional) day index.
-// metrics: { metros, normals, coef(category obj), forecast }
+// Per-city point field for one category + one (possibly fractional) day index.
+// ctx: { region(locked city subset), normals, coefficients, forecast }
 export function demandField(ctx, categoryId, dayFloat) {
-  const { metros, normals, coefficients, forecast } = ctx;
+  const { region, normals, coefficients, forecast } = ctx;
   const cat = coefficients.categories[categoryId];
   const elasticity = cat.elasticity;
   const driver = cat.driver; // "temperature_2m_max"
@@ -21,7 +21,7 @@ export function demandField(ctx, categoryId, dayFloat) {
   const hi = Math.min(dates.length - 1, lo + 1);
   const frac = dayFloat - lo;
 
-  return metros
+  return region
     .map((m) => {
       const f = forecast.byMetro[m.id];
       const norm = normals[m.id] && normals[m.id][driver];
