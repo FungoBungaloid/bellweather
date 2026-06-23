@@ -7,7 +7,7 @@ import { diagnose, pickHeadlineDay } from "./diagnose.js?v=3";
 import { buildBrief, fireAction, headlineText, usd, pct } from "./action.js?v=3";
 import { IsobarMap } from "./isobars.js?v=3";
 import { Globe } from "./globe.js?v=3";
-import { md, renderScatter, reallocTable, tickerHTML, railCardHTML } from "./ui.js?v=3";
+import { md, renderScatter, reallocTable, tickerHTML, railCardHTML, actionCardHTML } from "./ui.js?v=3";
 
 const $ = (id) => document.getElementById(id);
 
@@ -161,8 +161,10 @@ function categoryScale(id) {
   const abs = [];
   for (const field of state.cats[id].week) for (const p of field) abs.push(Math.abs(p.value));
   abs.sort((a, b) => a - b);
-  const p85 = abs[Math.floor(abs.length * 0.85)] || 5;
-  return Math.max(5, p85);
+  // 65th percentile: saturates the field so the map reads vividly for every
+  // product, instead of high-elasticity lines washing out near the centre.
+  const p = abs[Math.floor(abs.length * 0.65)] || 5;
+  return Math.max(4, p);
 }
 
 function setDay(day) {
@@ -174,10 +176,21 @@ function setDay(day) {
   state.map.setMarkers(pickFlagged(diag), (row) => openDrawer(row));
   updateTitle(diag);
   updateAlert(diag);
+  updateLoop(diag);
   updateDayStrip();
   updateTicker(diag);
   startRail(diag);
   if ($("drawer").classList.contains("open")) renderDrawer(diag);
+}
+
+// end-to-end loop indicator: signal → intelligence → action
+function updateLoop(diag, fired) {
+  const src = state.ctx ? state.ctx.forecast.source : "—";
+  const gaps = diag ? diag.ranked.filter((r) => r.kind !== "aligned").length : 0;
+  $("loop").innerHTML =
+    `<i class="on">Signal ${src === "live" ? "live" : "cache"}</i>` +
+    `<i class="on">Intel ${gaps} gaps</i>` +
+    `<i class="${fired ? "act" : ""}">Action ${fired ? "sent" : "ready"}</i>`;
 }
 
 function pickFlagged(diag) {
@@ -315,6 +328,7 @@ function renderDrawer(diag) {
   const cat = state.data.coefficients.categories[state.catId];
   const catMeta = { ...cat, ...state.data.categories[state.catId] };
   const brief = buildBrief(diag, catMeta, state.ctx.forecast.source);
+  $("actioncard").innerHTML = actionCardHTML(diag, catMeta);
   $("briefBody").innerHTML = md(brief);
   $("realloc").innerHTML = reallocTable(diag);
   renderScatter($("scatter"), catMeta);
@@ -364,8 +378,12 @@ async function fireFromState(btn) {
   };
   if (btn) btn.disabled = true;
   const res = await fireAction(diag, catMeta);
-  if ($("drawer").classList.contains("open"))
+  diag._fired = true;
+  updateLoop(diag, true);
+  if ($("drawer").classList.contains("open")) {
+    $("actioncard").innerHTML = actionCardHTML(diag, catMeta);
     $("actionStatus").textContent = (res.mode === "slack" ? "📨 " : "✉️ ") + res.detail;
+  }
   if (btn) { btn.disabled = false; flash(btn, res.mode === "slack" ? "Sent ✓" : "Draft ✓"); }
   else flash($("fireRail"), res.mode === "slack" ? "Sent ✓" : "Draft ✓");
 }

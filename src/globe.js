@@ -1,10 +1,10 @@
 // globe.js — the entry surface. A spun-up orthographic globe; aim it anywhere on
 // Earth, then "lock in" a region. Riso poster styling: paper sphere, blue
 // graticule, ink city dots, orange reticle + selection.
-import { d3 } from "../vendor/libs.js?v=3";
+import { d3, topojson } from "../vendor/libs.js?v=3";
 import { CONFIG, PALETTE } from "./config.js?v=3";
 
-const TAU = 2 * Math.PI;
+const OCEAN = "#cfd8f7"; // light riso blue — strong contrast against the paper page
 
 export class Globe {
   constructor(svgEl, cities, { onAim } = {}) {
@@ -42,24 +42,40 @@ export class Globe {
     this.gSphere = this.svg.append("g");
     this.sphere = this.gSphere.append("path")
       .datum({ type: "Sphere" })
-      .attr("fill", PALETTE.paper2)
+      .attr("fill", OCEAN)
       .attr("stroke", PALETTE.ink)
-      .attr("stroke-width", 2);
+      .attr("stroke-width", 2.5);
     this.gratPath = this.gSphere.append("path")
       .datum(this.graticule())
       .attr("fill", "none")
       .attr("stroke", PALETTE.blue)
-      .attr("stroke-width", 0.6)
-      .attr("stroke-opacity", 0.4);
+      .attr("stroke-width", 0.5)
+      .attr("stroke-opacity", 0.28);
 
+    this.gLand = this.svg.append("g");   // real coastlines, if vendored
     this.gReticle = this.svg.append("g");
     this.gDots = this.svg.append("g");
+    this.gLabels = this.svg.append("g");
 
+    this.loadLand();
     this.attachDrag();
     this.render();
     this.startAuto();
     window.addEventListener("resize", this._onResize = () => this.onResize());
     return this;
+  }
+
+  // Optional real geography: ships only after `npm run vendor` fetches it.
+  // Until then the globe reads as a clean labelled city constellation.
+  async loadLand() {
+    try {
+      const topo = await fetch("./data/land-110m.json").then((r) => { if (!r.ok) throw 0; return r.json(); });
+      const key = topo.objects.land ? "land" : Object.keys(topo.objects)[0];
+      this.land = topojson.feature(topo, topo.objects[key]);
+      this.render();
+    } catch (e) {
+      this.land = null; // graceful: constellation globe
+    }
   }
 
   onResize() {
@@ -136,33 +152,58 @@ export class Globe {
     this.sphere.attr("d", this.path);
     this.gratPath.attr("d", this.path);
 
+    // real coastlines, if vendored
+    if (this.land) {
+      this.gLand.selectAll("path").data([this.land]).join("path")
+        .attr("d", this.path)
+        .attr("fill", PALETTE.paper)
+        .attr("fill-opacity", 0.95)
+        .attr("stroke", PALETTE.ink)
+        .attr("stroke-width", 0.5);
+    }
+
     // reticle: the lock circle at centre
     const circle = d3.geoCircle().center(c).radius(CONFIG.lockRadiusDeg)();
     this.gReticle.selectAll("path").data([circle]).join("path")
       .attr("d", this.path)
       .attr("fill", PALETTE.orange)
-      .attr("fill-opacity", 0.12)
+      .attr("fill-opacity", 0.14)
       .attr("stroke", PALETTE.orange)
-      .attr("stroke-width", 1.6)
+      .attr("stroke-width", 2)
       .attr("stroke-dasharray", "5 4");
 
     const selList = this.selection();
     const sel = new Set(selList.map((m) => m.id));
+    const rOf = (m) => 1.6 + Math.min(3.2, Math.sqrt(m.population / 1e6) * 0.9);
     // only draw the near hemisphere
     const visible = this.cities.filter((m) => d3.geoDistance([m.lon, m.lat], c) < Math.PI / 2);
-    const dots = this.gDots.selectAll("circle").data(visible, (m) => m.id);
-    dots.join(
+    this.gDots.selectAll("circle").data(visible, (m) => m.id).join(
       (enter) => enter.append("circle"),
       (update) => update,
       (exit) => exit.remove()
     )
       .attr("cx", (m) => this.projection([m.lon, m.lat])[0])
       .attr("cy", (m) => this.projection([m.lon, m.lat])[1])
-      .attr("r", (m) => (sel.has(m.id) ? 3.6 : 1.8))
+      .attr("r", (m) => (sel.has(m.id) ? rOf(m) + 1.6 : rOf(m)))
       .attr("fill", (m) => (sel.has(m.id) ? PALETTE.orange : PALETTE.ink))
-      .attr("fill-opacity", (m) => (sel.has(m.id) ? 1 : 0.5))
-      .attr("stroke", (m) => (sel.has(m.id) ? PALETTE.paper : "none"))
-      .attr("stroke-width", 1);
+      .attr("fill-opacity", (m) => (sel.has(m.id) ? 1 : 0.55))
+      .attr("stroke", PALETTE.paper)
+      .attr("stroke-width", (m) => (sel.has(m.id) ? 1.5 : 0.6));
+
+    // label the selected cities (confirms what will lock) on the near side
+    const labels = selList.filter((m) => d3.geoDistance([m.lon, m.lat], c) < Math.PI / 2);
+    this.gLabels.selectAll("text").data(labels, (m) => m.id).join(
+      (enter) => enter.append("text"),
+      (update) => update,
+      (exit) => exit.remove()
+    )
+      .attr("x", (m) => this.projection([m.lon, m.lat])[0] + rOf(m) + 3)
+      .attr("y", (m) => this.projection([m.lon, m.lat])[1] + 3)
+      .attr("font-family", "'Space Mono', ui-monospace, monospace")
+      .attr("font-size", 10).attr("font-weight", 700)
+      .attr("fill", PALETTE.ink).attr("paint-order", "stroke")
+      .attr("stroke", PALETTE.paper).attr("stroke-width", 2.6)
+      .text((m) => m.name);
 
     // only notify when the locked selection actually changes (avoids per-frame churn)
     const key = selList.map((m) => m.id).join("|");

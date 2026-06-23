@@ -127,6 +127,26 @@ export function tickerHTML(diag, catLabel) {
   return seq + `<span class="tk sep">◆</span>` + seq + `<span class="tk sep">◆</span>`;
 }
 
+// --- concise, action-ready card (top of drawer) -----------------------------
+export function actionCardHTML(diag, catMeta) {
+  const h = diag.headline, s = diag.source;
+  const route = s
+    ? `<span class="from">${s.name}</span> &nbsp;→&nbsp; <span class="to">${h.name}</span>`
+    : `into <span class="to">${h.name}</span>`;
+  const dir = h.anomaly >= 0 ? "heat" : "cold";
+  const line = `<b>${catMeta.label}</b> · ${rarity(h.surprise).toLowerCase()} ${dir} swing in ${h.name} — ` +
+    `<b>${(h.surprise || 0).toFixed(1)}σ</b>, demand <b>${pct(h.value)}</b> vs normal, under-funded vs the plan.`;
+  const creative = ((catMeta.creative_angle || "").replace("{temp_f}", Math.round((h.tmax * 9) / 5 + 32)).split(".")[0]) + ".";
+  return `
+    <div class="ac-kick">Recommended move · ${diag.dow}</div>
+    <div class="ac-move">Move ${usd(diag.reallocation)}</div>
+    <div class="ac-route">${route}</div>
+    <div class="ac-line">${line}</div>
+    <div class="ac-line"><b>Creative:</b> ${creative}</div>
+    <div class="ac-owner">Owner · ${h.buyer} ${h.handle || ""}</div>
+    <div class="ac-trail"><i class="on">Signal ✓</i><i class="on">Intelligence ✓</i><i class="${diag._fired ? "on" : ""}">Action ${diag._fired ? "✓" : "▸"}</i></div>`;
+}
+
 // --- right-rail card (auto-cycling detail) ----------------------------------
 export function railCardHTML(r, catMeta) {
   const up = r.value >= 0;
