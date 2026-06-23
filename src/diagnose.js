@@ -22,22 +22,28 @@ export function diagnose(field, mediaPlan, dayIndex, dates) {
     const w = (mediaPlan[id] && mediaPlan[id].current_weight) || 0;
     return cwSum > 1e-9 ? w / cwSum : 1 / field.length;
   };
-  // metro value: dampened population share (so big gaps in big markets rank up,
-  // without NYC swamping everything).
+  // market value: heavily dampened population share. We damp size hard (^0.5)
+  // on purpose — the whole point is to stop the obvious mega-markets from
+  // swamping the genuinely surprising, smaller ones.
   const valRaw = {};
   let valSum = 0;
   field.forEach((p) => {
-    const v = Math.pow(p.population, 0.65);
+    const v = Math.pow(p.population, 0.5);
     valRaw[p.id] = v;
     valSum += v;
   });
   const value = (id) => valRaw[id] / valSum;
 
-  // implied (target) weight: market value x demand surge, normalised.
+  // surge INTENSITY = demand departure amplified by how unusual it is for that
+  // market. A routine +5% (z≈0.5) barely registers; a rare +5% (z≈2.5) screams.
+  const surpriseW = (p) => 0.5 + Math.min(p.surprise || 0, 3) * 0.7;
+  const intensity = (p) => relu(p.value) * surpriseW(p);
+
+  // implied (target) weight: market value x surge intensity, normalised.
   let rawSum = 0;
   const raw = {};
   field.forEach((p) => {
-    raw[p.id] = value(p.id) * relu(p.value);
+    raw[p.id] = value(p.id) * intensity(p);
     rawSum += raw[p.id];
   });
   const allFlat = rawSum < 1e-9;
@@ -48,7 +54,8 @@ export function diagnose(field, mediaPlan, dayIndex, dates) {
     const move = tw - cw; // + => add budget, - => cut budget
     const dollars = move * CONFIG.flightBudget;
     let kind;
-    if (p.value > 1 && move > 0) kind = "surge_underweight"; // push IN
+    // "Notable" demands a real, unusual departure — not just any positive blip.
+    if (p.value > 0.5 && (p.surprise || 0) >= 0.8 && move > 0) kind = "surge_underweight"; // push IN
     else if (move < 0) kind = "slump_overweight"; // pull OUT
     else kind = "aligned";
     return {
@@ -60,14 +67,16 @@ export function diagnose(field, mediaPlan, dayIndex, dates) {
       move,
       dollars,
       kind,
-      score: Math.abs(dollars) * (0.5 + value(p.id)),
+      // ranking is surprise-led: the rarer the departure, the louder the alert.
+      score: Math.abs(dollars) * (0.3 + Math.min(p.surprise || 0, 3) * 0.5),
     };
   });
 
   const ranked = [...rows].sort((a, b) => b.score - a.score);
+  // headline the most SURPRISING under-funded surge, not merely the biggest.
   const pushIn = rows
     .filter((r) => r.kind === "surge_underweight")
-    .sort((a, b) => b.dollars - a.dollars);
+    .sort((a, b) => b.score - a.score);
   const pullOut = rows
     .filter((r) => r.kind === "slump_overweight")
     .sort((a, b) => a.dollars - b.dollars);

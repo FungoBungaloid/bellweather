@@ -105,7 +105,7 @@ export class IsobarMap {
       .attr("fill", "none")
       .attr("stroke", PALETTE.blue)
       .attr("stroke-width", 0.5)
-      .attr("stroke-opacity", 0.18)
+      .attr("stroke-opacity", 0.28)
       .attr("vector-effect", "non-scaling-stroke");
 
     // US basemap only when the region includes US cities
@@ -121,20 +121,9 @@ export class IsobarMap {
         .attr("vector-effect", "non-scaling-stroke");
     }
 
-    // clip: rounded bounding box of projected cities (+pad) — a clean poster panel
-    const xs = cities.map((m) => this.projection([m.lon, m.lat])[0]);
-    const ys = cities.map((m) => this.projection([m.lon, m.lat])[1]);
-    const cpad = 0.07 * Math.min(this.W, this.H);
-    const x0 = Math.max(0, Math.min(...xs) - cpad), x1 = Math.min(this.W, Math.max(...xs) + cpad);
-    const y0 = Math.max(0, Math.min(...ys) - cpad), y1 = Math.min(this.H, Math.max(...ys) + cpad);
-    this.defs.select("#regClip").remove();
-    this.defs.append("clipPath").attr("id", "regClip").append("rect")
-      .attr("x", x0).attr("y", y0).attr("width", x1 - x0).attr("height", y1 - y0)
-      .attr("rx", 10);
-    this.gFill.attr("clip-path", "url(#regClip)");
-    this.gLines.attr("clip-path", "url(#regClip)");
-    this.gFront.attr("clip-path", "url(#regClip)");
-    this._clipBox = { x0, y0, x1, y1 };
+    // Full-bleed demand field — the IDW grid covers the whole stage, so the
+    // pressure map reads edge to edge like a poster. (No region clip: a tight
+    // bounding box risked a degenerate rect that blanked the whole map.)
   }
 
   project(lon, lat) { return this.projection([lon, lat]); }

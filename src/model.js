@@ -30,6 +30,11 @@ export function demandField(ctx, categoryId, dayFloat) {
       const doy = dayOfYear(dates[Math.round(dayFloat)] || dates[lo]);
       const normal = norm[Math.min(365, doy - 1)];
       const anomaly = t - normal;
+      // Statistical surprise: the anomaly measured in this market's OWN typical
+      // day-to-day swings. A +4°C jump is routine in Chicago (σ≈4.5) but a rare
+      // event in San Diego (σ≈2.3) — that's where the non-obvious money is.
+      const sigma = m.sigma || 3.5;
+      const z = anomaly / sigma;
       return {
         id: m.id,
         name: m.name,
@@ -37,9 +42,12 @@ export function demandField(ctx, categoryId, dayFloat) {
         lat: m.lat,
         lon: m.lon,
         population: m.population,
+        sigma,
         tmax: t,
         normal,
         anomaly,
+        z,
+        surprise: Math.abs(z),
         value: elasticity * anomaly, // demand_delta, %
       };
     })
