@@ -1,0 +1,55 @@
+name: Build data (calibrate + geography)
+
+# GitHub Pages serves static files only — it cannot run Python. So the real
+# calibration (ERA5 history + Wikipedia pageviews) and the world-geography
+# fetch run HERE, in CI (which has network + can set a User-Agent), and commit
+# the regenerated files. Pages then serves the calibrated, outline-complete app.
+#
+# Run it from the Actions tab (Run workflow), or let the monthly cron refresh it.
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 6 1 * *" # 06:00 UTC on the 1st of each month
+
+permissions:
+  contents: write
+
+jobs:
+  build-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Fetch map geography (globe coastlines + regional outlines)
+        run: |
+          npm i --no-audit --no-fund us-atlas@3 world-atlas@3
+          cp node_modules/us-atlas/states-10m.json     data/states-10m.json
+          cp node_modules/world-atlas/land-110m.json    data/land-110m.json
+          cp node_modules/world-atlas/countries-110m.json data/countries-110m.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Calibrate elasticities + climatological normals (real ERA5 + pageviews)
+        run: |
+          python -m pip install --quiet requests numpy
+          python scripts/calibrate.py --years 5
+
+      - name: Commit regenerated data
+        run: |
+          git config user.name  "bellwether-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/coefficients.json data/normals.json \
+                  data/land-110m.json data/countries-110m.json data/states-10m.json
+          if git diff --cached --quiet; then
+            echo "No data change."
+          else
+            git commit -m "chore: rebuild calibrated data + geography ($(date -u +%F))"
+            git push
+          fi

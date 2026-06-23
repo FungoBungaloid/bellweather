@@ -4,7 +4,7 @@
   "private": true,
   "description": "A weather map, but the fronts are demand.",
   "scripts": {
-    "vendor": "npm i && cp node_modules/us-atlas/states-10m.json data/states-10m.json && cp node_modules/world-atlas/land-110m.json data/land-110m.json && node build/bundle.mjs",
+    "vendor": "npm i && cp node_modules/us-atlas/states-10m.json data/states-10m.json && cp node_modules/world-atlas/land-110m.json data/land-110m.json && cp node_modules/world-atlas/countries-110m.json data/countries-110m.json && node build/bundle.mjs",
     "serve": "python3 -m http.server 8000"
   },
   "comment": "Build-time only. The app ships vendor/libs.js + data/states-10m.json and runs with nothing from npm at runtime. Run `npm run vendor` to regenerate them and to fetch data/land-110m.json (real globe coastlines; the globe falls back to a city constellation if it is absent).",

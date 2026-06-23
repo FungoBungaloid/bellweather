@@ -54,12 +54,14 @@ export class IsobarMap {
 
     this.defs = this.svg.append("defs");
 
-    // layers (draw order)
-    this.gGrat = this.svg.append("g").attr("class", "grat");
-    this.gBase = this.svg.append("g").attr("class", "base");
+    // layers, bottom → top. The demand field is the *background*; outlines and
+    // the graticule are drawn ON TOP of it so they're always legible (otherwise
+    // the 0.9-opacity fills bury them and you see no map at all).
     this.gFill = this.svg.append("g").attr("class", "fills");
     this.gLines = this.svg.append("g").attr("class", "lines");
     this.gFront = this.svg.append("g").attr("class", "front");
+    this.gGrat = this.svg.append("g").attr("class", "grat");
+    this.gBase = this.svg.append("g").attr("class", "base");
     this.gCities = this.svg.append("g").attr("class", "cities");
     this.gMarkers = this.svg.append("g").attr("class", "markers");
 
@@ -70,7 +72,7 @@ export class IsobarMap {
       .on("mousemove.tip", (ev) => { if (!this._overCity) this.showBandTip(ev); })
       .on("mouseleave.tip", () => { if (!this._overCity) this.hideTip(); });
 
-    // Load US state borders once; only drawn when a region touches the US.
+    // Load US state borders once; drawn (finer detail) when a region touches US.
     const EXCLUDE = new Set(["02", "15", "72", "60", "66", "69", "78"]);
     try {
       const us = await fetch(CONFIG.statesTopoUrl).then((r) => r.json());
@@ -84,6 +86,18 @@ export class IsobarMap {
       console.warn("US basemap unavailable.", e.message);
       this.usBorders = null;
     }
+
+    // Optional world outlines (coastlines + national borders) for ANY region.
+    // Ships only after CI/`npm run vendor` fetches it; absent → graticule only.
+    this.worldMesh = null;
+    try {
+      const w = await fetch("./data/countries-110m.json");
+      if (w.ok) {
+        const topo = await w.json();
+        const key = topo.objects.countries ? "countries" : Object.keys(topo.objects)[0];
+        this.worldMesh = topojson.mesh(topo, topo.objects[key]);
+      }
+    } catch (e) { /* graticule-only fallback */ }
 
     this.graticule = d3.geoGraticule().step([10, 10]);
 
@@ -106,25 +120,35 @@ export class IsobarMap {
     if (this.projection.scale() > 4000) this.projection.scale(4000);
     this.geoPath = d3.geoPath(this.projection);
 
-    // graticule
+    // graticule (drawn over the field, so always visible)
     this.gGrat.selectAll("path").data([this.graticule()]).join("path")
       .attr("d", this.geoPath)
       .attr("fill", "none")
-      .attr("stroke", PALETTE.blue)
-      .attr("stroke-width", 0.5)
-      .attr("stroke-opacity", 0.28)
+      .attr("stroke", PALETTE.ink)
+      .attr("stroke-width", 0.4)
+      .attr("stroke-opacity", 0.16)
       .attr("vector-effect", "non-scaling-stroke");
 
-    // US basemap only when the region includes US cities
-    const touchesUS = cities.some((m) => m.cc === "US");
+    // basemap outlines — on TOP of the demand field. World coastlines/borders
+    // for any region (if vendored), plus finer US state lines when relevant.
     this.gBase.selectAll("path").remove();
+    if (this.worldMesh) {
+      this.gBase.append("path")
+        .attr("d", this.geoPath(this.worldMesh))
+        .attr("fill", "none")
+        .attr("stroke", PALETTE.ink)
+        .attr("stroke-width", 1.1)
+        .attr("stroke-opacity", 0.7)
+        .attr("vector-effect", "non-scaling-stroke");
+    }
+    const touchesUS = cities.some((m) => m.cc === "US");
     if (touchesUS && this.usBorders) {
       this.gBase.append("path")
         .attr("d", this.geoPath(this.usBorders))
         .attr("fill", "none")
         .attr("stroke", PALETTE.ink)
         .attr("stroke-width", 0.7)
-        .attr("stroke-opacity", 0.35)
+        .attr("stroke-opacity", this.worldMesh ? 0.4 : 0.55)
         .attr("vector-effect", "non-scaling-stroke");
     }
 
