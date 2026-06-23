@@ -145,7 +145,10 @@ manually with **Actions → Bellwether morning run → Run workflow**.
 2. The region's forecast + product intelligence generate, and the demand-pressure map appears
    on the punchiest day, the demand front mid-sweep.
 3. **Press ▶** — the front sweeps across the region over the week. (The single most persuasive moment.)
-4. **Tap the headline alert** (bottom of the map) → the drawer opens:
+   Hover any market for its demand %, σ-surprise and forecast; hover anywhere else for the live isoband reading.
+   The **Signal → Intelligence → Action** loop indicator in the header shows the pipeline running end-to-end.
+4. **Tap the headline alert** (bottom of the map) → the drawer opens, led by a concise, copy-ready **action card**
+   (one move, from → to, owner, creative cue), then:
    - the **reallocation** table (from → to, dollar-sized),
    - **Fire alert / Copy / Download**,
    - the **evidence** scatter with `r²` and elasticity,
@@ -162,10 +165,12 @@ The repo already ships `vendor/libs.js` and `data/states-10m.json`. To regenerat
 them (e.g. to bump d3):
 
 ```bash
-npm run vendor    # installs build deps, copies the basemap, re-bundles d3+topojson
+npm run vendor    # installs build deps, copies the US + world basemaps, re-bundles d3+topojson
 ```
 
-These are **build-time only** — the app needs nothing from npm to run.
+This also fetches `data/land-110m.json`, which lights up **real coastlines on the globe**. Without it
+the globe falls back to a clean, labelled city constellation (still fully usable). These are
+**build-time only** — the app needs nothing from npm to run.
 
 ## "Is the data real?"
 

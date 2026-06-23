@@ -57,11 +57,18 @@ export class IsobarMap {
     // layers (draw order)
     this.gGrat = this.svg.append("g").attr("class", "grat");
     this.gBase = this.svg.append("g").attr("class", "base");
-    this.gFill = this.svg.append("g").attr("class", "fills").style("mix-blend-mode", "multiply");
+    this.gFill = this.svg.append("g").attr("class", "fills");
     this.gLines = this.svg.append("g").attr("class", "lines");
     this.gFront = this.svg.append("g").attr("class", "front");
     this.gCities = this.svg.append("g").attr("class", "cities");
     this.gMarkers = this.svg.append("g").attr("class", "markers");
+
+    // hover tooltip (city detail + live isoband readout)
+    this.tip = d3.select(this.svg.node().parentNode).append("div")
+      .attr("class", "maptip").style("display", "none");
+    this.svg
+      .on("mousemove.tip", (ev) => { if (!this._overCity) this.showBandTip(ev); })
+      .on("mouseleave.tip", () => { if (!this._overCity) this.hideTip(); });
 
     // Load US state borders once; only drawn when a region touches the US.
     const EXCLUDE = new Set(["02", "15", "72", "60", "66", "69", "78"]);
@@ -128,6 +135,44 @@ export class IsobarMap {
 
   project(lon, lat) { return this.projection([lon, lat]); }
 
+  // ---- hover tooltips ----
+  sampleGrid(vx, vy) {
+    if (!this._grid) return null;
+    const cw = this.W / CONFIG.gridX, ch = this.H / CONFIG.gridY;
+    let i = Math.floor(vx / cw), j = Math.floor(vy / ch);
+    i = Math.max(0, Math.min(CONFIG.gridX - 1, i));
+    j = Math.max(0, Math.min(CONFIG.gridY - 1, j));
+    return this._grid[j * CONFIG.gridX + i];
+  }
+  placeTip(ev) {
+    const [px, py] = d3.pointer(ev, this.svg.node().parentNode);
+    const flip = px > this.svg.node().parentNode.clientWidth - 240;
+    this.tip.style("display", "block")
+      .style("left", (flip ? px - 230 : px + 16) + "px")
+      .style("top", (py + 16) + "px");
+  }
+  showBandTip(ev) {
+    const [vx, vy] = d3.pointer(ev, this.svg.node());
+    const v = this.sampleGrid(vx, vy);
+    if (v == null || isNaN(v)) { this.hideTip(); return; }
+    const s = v >= 0 ? "pos" : "neg";
+    this.tip.html(`<div class="t-band"><b class="${s}">${v >= 0 ? "+" : ""}${v.toFixed(0)}%</b> demand vs normal</div>`);
+    this.placeTip(ev);
+  }
+  showCityTip(ev, d) {
+    const f = (c) => Math.round((c * 9) / 5 + 32);
+    const s = d.value >= 0 ? "pos" : "neg";
+    this.tip.html(
+      `<div class="t-city">${d.name}<span class="t-mut">, ${d.state}</span></div>` +
+      `<div class="t-row"><span>Demand vs normal</span><b class="${s}">${d.value >= 0 ? "+" : ""}${d.value.toFixed(1)}%</b></div>` +
+      `<div class="t-row"><span>Surprise</span><b>${(d.surprise || 0).toFixed(1)}σ</b></div>` +
+      `<div class="t-row"><span>Forecast</span><b>${f(d.tmax)}°F</b></div>` +
+      `<div class="t-mut t-small">${d.anomaly >= 0 ? "+" : ""}${d.anomaly.toFixed(1)}°C vs seasonal normal · market σ ${(d.sigma || 0).toFixed(1)}°C</div>`
+    );
+    this.placeTip(ev);
+  }
+  hideTip() { if (this.tip) this.tip.style("display", "none"); }
+
   // field: [{lon,lat,value,name,state,...}]. Builds grid + contours and draws them.
   render(field) {
     const pts = field
@@ -145,7 +190,7 @@ export class IsobarMap {
     this.gFill.selectAll("path").data(contours, (d) => d.value).join("path")
       .attr("d", (d) => this.contourPath(d))
       .attr("fill", (d) => this.color(d.value))
-      .attr("fill-opacity", 0.9);
+      .attr("fill-opacity", 0.92);
 
     this.gLines.selectAll("path")
       .data(contours.filter((d) => d.value !== this.frontThreshold), (d) => d.value).join("path")
@@ -153,8 +198,10 @@ export class IsobarMap {
       .attr("fill", "none")
       .attr("stroke", PALETTE.ink)
       .attr("stroke-width", 0.5)
-      .attr("stroke-opacity", 0.22)
+      .attr("stroke-opacity", 0.38)
       .attr("vector-effect", "non-scaling-stroke");
+
+    this._grid = grid; // kept for hover sampling
 
     // the demand FRONT — emphasised in ink
     const front = contours.find((d) => d.value === this.frontThreshold);
@@ -186,9 +233,13 @@ export class IsobarMap {
       },
       (update) => update,
       (exit) => exit.remove()
-    ).attr("transform", (d) => `translate(${d.x},${d.y})`);
+    ).attr("transform", (d) => `translate(${d.x},${d.y})`)
+      .style("cursor", "pointer")
+      .on("mouseenter", (ev, d) => { this._overCity = true; this.showCityTip(ev, d); })
+      .on("mousemove", (ev, d) => this.showCityTip(ev, d))
+      .on("mouseleave", () => { this._overCity = false; this.hideTip(); });
 
-    g.select("circle.cdot").attr("r", 2.6).attr("fill", PALETTE.ink).attr("fill-opacity", 0.85);
+    g.select("circle.cdot").attr("r", 3).attr("fill", PALETTE.ink).attr("fill-opacity", 0.9);
     g.select("text.clabel")
       .attr("x", 5).attr("y", 3).attr("font-size", 9.5)
       .attr("font-family", "'Space Mono', ui-monospace, monospace").attr("letter-spacing", "0.02em")
@@ -215,7 +266,10 @@ export class IsobarMap {
       (exit) => exit.remove()
     )
       .attr("transform", (d) => `translate(${d.x},${d.y})`)
-      .on("click", (ev, d) => onClick && onClick(d));
+      .on("click", (ev, d) => onClick && onClick(d))
+      .on("mouseenter", (ev, d) => { this._overCity = true; this.showCityTip(ev, d); })
+      .on("mousemove", (ev, d) => this.showCityTip(ev, d))
+      .on("mouseleave", () => { this._overCity = false; this.hideTip(); });
 
     g.select("circle.ring")
       .attr("r", 8).attr("fill", "none")
