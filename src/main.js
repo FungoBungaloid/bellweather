@@ -44,7 +44,8 @@ async function boot() {
   buildGallery("globeGallery", false);
   buildGallery("forecastGallery", true);
 
-  state.globe = new Globe($("globe"), cities, { onAim: onAim }).init();
+  state.globe = new Globe($("globe"), cities, { onAim: onAim });
+  state.globe.init();
 
   wireControls();
   startClock();
@@ -53,6 +54,7 @@ async function boot() {
 
 // ---------- globe / aim ----------
 function onAim(sel) {
+  if (!state.globe) return;
   state.aimSel = sel;
   const name = state.globe.regionLabel(sel);
   state.regionName = name;
