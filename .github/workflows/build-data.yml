@@ -5,6 +5,10 @@ name: Build data (calibrate + geography)
 # fetch run HERE, in CI (which has network + can set a User-Agent), and commit
 # the regenerated files. Pages then serves the calibrated, outline-complete app.
 #
+# Geography is committed FIRST so the map/globe outlines land even if the long
+# calibration step is slow or flaky. calibrate.py is fault-tolerant: transient
+# failures retry, and anything that still can't calibrate keeps its seed value.
+#
 # Run it from the Actions tab (Run workflow), or let the monthly cron refresh it.
 on:
   workflow_dispatch: {}
@@ -17,7 +21,7 @@ permissions:
 jobs:
   build-data:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -28,9 +32,21 @@ jobs:
       - name: Fetch map geography (globe coastlines + regional outlines)
         run: |
           npm i --no-audit --no-fund us-atlas@3 world-atlas@2
-          cp node_modules/us-atlas/states-10m.json     data/states-10m.json
-          cp node_modules/world-atlas/land-110m.json    data/land-110m.json
-          cp node_modules/world-atlas/countries-110m.json data/countries-110m.json
+          cp node_modules/us-atlas/states-10m.json        data/states-10m.json
+          cp node_modules/world-atlas/land-110m.json       data/land-110m.json
+          cp node_modules/world-atlas/countries-110m.json  data/countries-110m.json
+
+      - name: Commit geography (so outlines land even if calibration is slow)
+        run: |
+          git config user.name  "bellwether-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/states-10m.json data/land-110m.json data/countries-110m.json
+          if git diff --cached --quiet; then
+            echo "No geography change."
+          else
+            git commit -m "chore: add/refresh map geography ($(date -u +%F))"
+            git push
+          fi
 
       - uses: actions/setup-python@v5
         with:
@@ -41,15 +57,12 @@ jobs:
           python -m pip install --quiet requests numpy
           python scripts/calibrate.py --years 5
 
-      - name: Commit regenerated data
+      - name: Commit calibrated data
         run: |
-          git config user.name  "bellwether-bot"
-          git config user.email "bot@users.noreply.github.com"
-          git add data/coefficients.json data/normals.json \
-                  data/land-110m.json data/countries-110m.json data/states-10m.json
+          git add data/coefficients.json data/normals.json
           if git diff --cached --quiet; then
-            echo "No data change."
+            echo "No calibration change."
           else
-            git commit -m "chore: rebuild calibrated data + geography ($(date -u +%F))"
+            git commit -m "chore: recalibrate elasticities + normals ($(date -u +%F))"
             git push
           fi
