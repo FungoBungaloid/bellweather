@@ -104,12 +104,28 @@ def daterange(years):
     return start, end
 
 
+def get(url, tries=5, timeout=60, **kw):
+    """GET with exponential-backoff retries — a single transient timeout must
+    never abort an hours-long calibration run."""
+    last = None
+    for i in range(tries):
+        try:
+            r = requests.get(url, timeout=timeout, **kw)
+            r.raise_for_status()
+            return r
+        except Exception as e:
+            last = e
+            wait = min(30, 2 ** i)
+            print(f"      retry {i + 1}/{tries} after {wait}s ({type(e).__name__})")
+            time.sleep(wait)
+    raise last
+
+
 def fetch_pageviews(article, start, end):
     url = ("https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/"
            f"en.wikipedia/all-access/all-agents/{article}/daily/"
            f"{start:%Y%m%d}/{end:%Y%m%d}")
-    r = requests.get(url, headers={"User-Agent": UA}, timeout=60)
-    r.raise_for_status()
+    r = get(url, headers={"User-Agent": UA})
     items = r.json().get("items", [])
     out = {}
     for it in items:
@@ -125,8 +141,7 @@ def fetch_archive_tmax(lat, lon, start, end, driver):
         "start_date": start.isoformat(), "end_date": end.isoformat(),
         "daily": driver, "temperature_unit": "celsius", "timezone": "UTC",
     }
-    r = requests.get(url, params=params, timeout=120)
-    r.raise_for_status()
+    r = get(url, params=params, timeout=90)
     d = r.json()["daily"]
     out = {}
     for t, v in zip(d["time"], d[driver]):
@@ -157,28 +172,39 @@ def regress(x, y):
     return float(slope), float(r2)
 
 
-def calibrate_category(cat_id, meta, start, end):
-    label, driver, direction, candidates = meta
-    print(f"\n== {label} ({cat_id}) ==")
-
-    # Weather anomaly: average deseasonalised tmax across the reference basket.
-    temp_resid_by_date = {}
-    counts = {}
+def reference_anomaly(driver, start, end):
+    """Average deseasonalised weather anomaly across the reference basket.
+    Computed ONCE and reused for every (temperature-driven) category."""
+    acc, counts, ok = {}, {}, 0
     for name, lat, lon in REFERENCE_CITIES:
         print(f"   archive {name} ...")
-        raw = fetch_archive_tmax(lat, lon, start, end, driver)
+        try:
+            raw = fetch_archive_tmax(lat, lon, start, end, driver)
+        except Exception as e:
+            print(f"      skip {name} ({type(e).__name__})")
+            continue
         resid, _ = deseasonalize(raw)
         for d, v in resid.items():
-            temp_resid_by_date[d] = temp_resid_by_date.get(d, 0.0) + v
+            acc[d] = acc.get(d, 0.0) + v
             counts[d] = counts.get(d, 0) + 1
-        time.sleep(0.5)
-    temp_anom = {d: temp_resid_by_date[d] / counts[d] for d in temp_resid_by_date}
+        ok += 1
+        time.sleep(0.4)
+    if ok == 0:
+        raise RuntimeError("reference basket: every archive fetch failed")
+    print(f"   reference basket built from {ok}/{len(REFERENCE_CITIES)} cities")
+    return {d: acc[d] / counts[d] for d in acc}
+
+
+def calibrate_category(cat_id, meta, temp_anom):
+    """Returns the calibrated coefficient dict, or None if no proxy is usable."""
+    label, driver, direction, candidates = meta
+    print(f"\n== {label} ({cat_id}) ==")
 
     best = None
     for article in candidates:
         print(f"   pageviews {article} ...")
         try:
-            pv = fetch_pageviews(article, start, end)
+            pv = fetch_pageviews(article, start_end[0], start_end[1])
         except Exception as e:
             print(f"      skip ({e})")
             continue
@@ -200,7 +226,8 @@ def calibrate_category(cat_id, meta, start, end):
         time.sleep(0.3)
 
     if best is None:
-        raise RuntimeError(f"No usable proxy for {cat_id}")
+        print(f"   !! no usable proxy for {cat_id} — keeping seed value")
+        return None
     article, slope, r2, x, y = best
     # downsample scatter to ~150 points
     idx = np.linspace(0, len(x) - 1, min(150, len(x))).astype(int)
@@ -216,43 +243,78 @@ def calibrate_category(cat_id, meta, start, end):
 
 def build_normals(years):
     """Per-city day-of-year mean daily max from ERA5 -> data/normals.json.
-    Reads the global city list written by gen_demo_data.py."""
+    Starts from the committed (seed) normals and overwrites each city as it is
+    fetched, so a transient failure on one city keeps its seed rather than
+    dropping the market from the app entirely."""
     start, end = daterange(years)
     cities = json.load(open(os.path.join(DATA, "cities.json")))
-    normals = {}
+    try:
+        normals = json.load(open(os.path.join(DATA, "normals.json")))
+    except Exception:
+        normals = {}
+    ok = 0
     for m in cities:
         print(f"   normals {m['name']} ...")
-        raw = fetch_archive_tmax(m["lat"], m["lon"], start, end, "temperature_2m_max")
-        by_doy = {}
-        for d, v in raw.items():
-            by_doy.setdefault(d.timetuple().tm_yday, []).append(v)
-        series = []
-        for doy in range(1, 367):
-            vals = by_doy.get(doy) or by_doy.get(365 if doy == 366 else doy) or [0.0]
-            series.append(round(float(np.mean(vals)), 2))
-        normals[m["id"]] = {"temperature_2m_max": series}
-        time.sleep(0.4)
+        try:
+            raw = fetch_archive_tmax(m["lat"], m["lon"], start, end, "temperature_2m_max")
+            by_doy = {}
+            for d, v in raw.items():
+                by_doy.setdefault(d.timetuple().tm_yday, []).append(v)
+            series = []
+            for doy in range(1, 367):
+                vals = by_doy.get(doy) or by_doy.get(365 if doy == 366 else doy) or [0.0]
+                series.append(round(float(np.mean(vals)), 2))
+            normals[m["id"]] = {"temperature_2m_max": series}
+            ok += 1
+        except Exception as e:
+            print(f"      FAILED ({type(e).__name__}) — keeping seed normal")
+        time.sleep(0.3)
     json.dump(normals, open(os.path.join(DATA, "normals.json"), "w"),
               separators=(",", ":"))
-    print(f"   wrote normals.json ({len(normals)} cities)")
+    print(f"   wrote normals.json ({ok}/{len(cities)} cities refreshed from ERA5)")
+
+
+start_end = (None, None)  # populated in main(), used by calibrate_category
 
 
 def main():
+    global start_end
     ap = argparse.ArgumentParser()
     ap.add_argument("--years", type=float, default=5)
     ap.add_argument("--skip-normals", action="store_true")
     args = ap.parse_args()
     start, end = daterange(args.years)
+    start_end = (start, end)
     print(f"Window: {start} .. {end}")
 
-    cats = {}
-    for cat_id, meta in CATEGORIES.items():
-        cats[cat_id] = calibrate_category(cat_id, meta, start, end)
+    # Start from the committed seed so any category we can't calibrate keeps a
+    # sensible value (and the app never breaks on a partial run).
+    try:
+        cats = dict(json.load(open(os.path.join(DATA, "coefficients.json")))["categories"])
+    except Exception:
+        cats = {}
 
-    out = {"generated_at": date.today().isoformat(), "categories": cats}
+    print("\nReference weather anomaly (fetched once, reused) ...")
+    temp_anom = reference_anomaly("temperature_2m_max", start, end)
+
+    calibrated = 0
+    for cat_id, meta in CATEGORIES.items():
+        try:
+            res = calibrate_category(cat_id, meta, temp_anom)
+            if res:
+                cats[cat_id] = res
+                calibrated += 1
+        except Exception as e:
+            print(f"   FAILED {cat_id}: {e} — keeping seed")
+
+    out = {
+        "generated_at": date.today().isoformat(),
+        "note": f"Calibrated {calibrated}/{len(CATEGORIES)} products on real ERA5 + pageviews; others retain seed values.",
+        "categories": cats,
+    }
     json.dump(out, open(os.path.join(DATA, "coefficients.json"), "w"),
               separators=(",", ":"))
-    print(f"\nWrote coefficients.json")
+    print(f"\nWrote coefficients.json ({calibrated}/{len(CATEGORIES)} calibrated)")
 
     if not args.skip_normals:
         print("\nBuilding climatological normals ...")
