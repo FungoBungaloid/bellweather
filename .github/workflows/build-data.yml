@@ -27,7 +27,7 @@ jobs:
 
       - name: Fetch map geography (globe coastlines + regional outlines)
         run: |
-          npm i --no-audit --no-fund us-atlas@3 world-atlas@3
+          npm i --no-audit --no-fund us-atlas@3 world-atlas@2
           cp node_modules/us-atlas/states-10m.json     data/states-10m.json
           cp node_modules/world-atlas/land-110m.json    data/land-110m.json
           cp node_modules/world-atlas/countries-110m.json data/countries-110m.json
