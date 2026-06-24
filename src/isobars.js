@@ -6,7 +6,11 @@ import { d3, topojson } from "../vendor/libs.js?v=3";
 import { CONFIG, PALETTE } from "./config.js?v=3";
 import { idwGrid } from "./interpolate.js?v=3";
 
-const FRACS = [0.13, 0.22, 0.34, 0.5, 0.72, 1.0]; // band edges as fraction of scale max
+// Band edges as a fraction of the scale max. A thin innermost band keeps the
+// neutral "cream" zone narrow so the diverging scheme reaches edge-to-edge
+// across the map; outer bands clamp at 1.0 so even extreme values stay on
+// the ramp rather than blowing the scale out and leaving the rest washed.
+const FRACS = [0.06, 0.15, 0.27, 0.42, 0.62, 0.85, 1.0];
 
 function scaleThresholds(M) {
   const neg = FRACS.map((f) => -M * f).reverse();

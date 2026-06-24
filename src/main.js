@@ -161,9 +161,11 @@ function categoryScale(id) {
   const abs = [];
   for (const field of state.cats[id].week) for (const p of field) abs.push(Math.abs(p.value));
   abs.sort((a, b) => a - b);
-  // 65th percentile: saturates the field so the map reads vividly for every
-  // product, instead of high-elasticity lines washing out near the centre.
-  const p = abs[Math.floor(abs.length * 0.65)] || 5;
+  // 50th percentile (median): the scale saturates on typical departures so the
+  // hot/cold scheme fills the entire map, while the most extreme metros simply
+  // clamp to the deepest red/blue instead of stretching the scale and washing
+  // everything else back toward neutral cream.
+  const p = abs[Math.floor(abs.length * 0.5)] || 5;
   return Math.max(4, p);
 }
 
