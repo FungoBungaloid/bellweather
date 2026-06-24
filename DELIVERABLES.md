@@ -36,7 +36,7 @@ Sized to the rubric's five axes — **Problem Framing, Signal Quality, Intellige
 
 ### Slide 2 — What Bellwether is (the one-liner + the map)
 **On screen:** The live isobar map, animated, mid-front. Caption: *"A weather map — but the fronts are demand."*
-**Say:** "This is a weather map where the fronts aren't temperature, they're *demand*. Red is where demand for a product is about to surge above normal; blue is where it's about to fall below. It reads on sight — and it's live, pulled from a real forecast across 117 cities worldwide."
+**Say:** "This is a weather map where the fronts aren't temperature, they're *demand*. Red is where demand for a product is about to surge above normal; blue is where it's about to fall below. It reads on sight — and it's live: one keyless, batched call to the Open-Meteo forecast API pulls 7 days across 117 cities, and every line on this map is computed in the browser. No backend, no API keys."
 
 ### Slide 3 — Signal quality: calibrated, not hand-waved
 **On screen:** The r² scatter panel (anomaly vs. demand residual) for a category, with the elasticity and r² called out. Footer: *"Weather data: Open-Meteo · Demand proxy: Wikimedia Pageviews."*
@@ -55,11 +55,11 @@ A small inset: a 28°C day flagged as a spike in one city and a non-event in ano
 
 ### Slide 6 — Action quality: it acts
 **On screen:** The action drawer — the from→to dollar move, the templated strategist brief, and the Slack/▶ buttons. Show a real Slack message or the prefilled email draft.
-**Say:** "And it acts. Bellwether writes the specific reallocation — pull this much out of the cooling market, push it into the heating one — drafts a strategist-grade brief with the real numbers, and fires it to the named buyer in Slack. One tap. The brief is template-driven so the demo never depends on a model being up."
+**Say:** "And it acts. Bellwether writes the specific reallocation — pull this much out of the cooling market, push it into the heating one — drafts a strategist-grade brief with the real numbers, and fires it to the named buyer in Slack through a tiny Cloudflare Worker, with an email draft as a zero-infra fallback. One tap. The brief is template-driven so the demo never depends on a model being up; routing it through an LLM is an optional upgrade on the same Worker."
 
 ### Slide 7 — The loop runs itself (Originality + Action)
-**On screen:** A clock/cron icon → GitHub Action → forecast snapshot → Slack. Caption: *"A scheduled morning run, no human in the middle."*
-**Say:** "Weather-triggered ads already exist — but only as reactive creative swaps at the ad server, *when the weather hits*. Nobody operates upstream, at the planning layer, with forecast lead time. Bellwether fills that empty seat — and it runs unattended on a cron, so the alert is waiting in Slack before anyone's at their desk."
+**On screen:** A clock/cron icon → GitHub Action → forecast snapshot → Slack. A small two-lane diagram: **Build time (CI):** ERA5 + Wikipedia → regression → `coefficients.json`. **Runtime (browser):** live Open-Meteo forecast → anomaly × elasticity → map → alert → Slack. Caption: *"A scheduled morning run, no human in the middle."*
+**Say:** "Weather-triggered ads already exist — but only as reactive creative swaps at the ad server, *when the weather hits*. Nobody operates upstream, at the planning layer, with forecast lead time. Bellwether fills that empty seat. The heavy lifting — calibrating elasticities on ERA5 history and Wikipedia demand proxies — happens offline in CI; the browser only ever makes one live forecast call and does light math. So it runs unattended on a cron, and the alert is waiting in Slack before anyone's at their desk."
 
 ### Slide 8 — Close
 **On screen:** The tagline again — *"We act three days before the weather arrives."* — plus the live app URL and team name.
@@ -69,42 +69,65 @@ A small inset: a 28°C day flagged as a spike in one city and a non-event in ano
 
 ---
 
-## 03 — Video Demo Script (~75 seconds, narrated)
+## 03 — Video Demo Script (~110 seconds, narrated)
 
-> Rule from the brief: *show it working, don't describe it.* Every line below is spoken **over a live screen recording** of the app. Capture on the most dramatic forecast day available so the front is vivid.
+> Rule from the brief: *show it working, don't describe it.* Every line below is spoken **over a live screen recording** of the app. Capture on the most dramatic forecast day available so the front is vivid. The script now folds in the technical "how" — data sources, what's AI vs. statistics, and how a real brand's data plugs in — at the moments each becomes visible on screen.
 
 **[0:00 — Globe]** *Screen: the spinning globe.*
-> "This is Bellwether. It watches the weather forecast across the world — because the forecast tells you where demand is heading before any sales number does."
+> "This is Bellwether — a single static web page, no backend, no API keys, deployable to GitHub Pages. It watches the weather forecast worldwide, because the forecast tells you where demand is heading before any sales number does."
 
-**[0:08 — Lock a region]** *Aim and lock onto a region with a strong front (e.g. Europe in a heatwave).*
-> "I'll lock onto Europe. Bellwether pulls the live forecast for every market here and turns it into a demand map."
+**[0:10 — Lock a region]** *Aim and lock onto a region with a strong front (e.g. Europe in a heatwave).*
+> "I'll lock onto Europe. The moment I do, the browser hits the Open-Meteo forecast API — keyless, CORS-open — and pulls a 7-day forecast for all 117 cities in a single batched request. That's the only live call the app makes, and it's real data, right now."
 
-**[0:16 — The map]** *The isobar map fills in.*
-> "Red is where demand is about to surge above normal; blue is where it's falling below. Right now there's a sharp cold swing over Lisbon."
+**[0:22 — The map]** *The isobar map fills in.*
+> "Then it does the math locally. For each city we take the forecast, subtract that market's own climatological normal for the day — so this is a *departure from normal*, not raw temperature — multiply by the product's calibrated weather elasticity, and interpolate the points into a field with inverse-distance weighting. D3 contours that into isobands. Red is demand surging above normal, blue is demand dipping below. There's a sharp cold swing over Lisbon."
 
-**[0:24 — Scrub the days]** *Hit play on the day scrubber; the front sweeps.*
-> "Play it forward and you watch the front move across the days — this is demand, three to seven days out."
+**[0:40 — Scrub the days]** *Hit play on the day scrubber; the front sweeps.*
+> "Play it forward and the front moves across the days — demand, three to seven days out, computed entirely in the browser."
 
-**[0:32 — Switch product, the invert]** *Switch from a cold-weather product to a hot-weather one.*
-> "Switch the product line and the map inverts — what's a surge for hot-weather demand is a slump for cold-weather demand, on the very same day. Same forecast, opposite money."
+**[0:48 — Switch product, the invert]** *Switch from a cold-weather product to a hot-weather one.*
+> "Switch the product line and the map inverts — a surge for hot-weather demand is a slump for cold-weather demand on the very same day. That sign comes straight from each product's elasticity coefficient. Same forecast, opposite money."
 
-**[0:42 — The evidence tap]** *Open the r² scatter.*
-> "And this isn't a hunch. We calibrated each product's weather sensitivity on years of real demand data — here's the fit, r-squared shown right on screen."
+**[0:58 — The evidence tap / under the hood]** *Open the r² scatter.*
+> "And this isn't a hunch. Those elasticities are calibrated *offline*, in a Python step — `calibrate.py` — that pulls years of historical temperature from the ERA5 reanalysis archive and a demand proxy from Wikipedia pageviews, then runs a linear regression per category. It writes out the elasticity and the r² you see here. That calibration is the machine-learning core; it runs at build time in a GitHub Action, never in the browser, so there's no key to leak and nothing heavy to load."
 
-**[0:52 — The gap + alert]** *Tap the headline alert / action marker.*
-> "Now cross-reference the media plan. Demand is jumping here, but the brand is under-weighted — that's the gap. Bellwether sizes it in dollars and ranks it."
+**[1:14 — The gap + alert]** *Tap the headline alert / action marker.*
+> "Now cross-reference the brand's media plan. We score every market — demand departure, times the gap between current and implied spend weight, times market size — and rank them. Demand's jumping here but the brand is under-weighted: that's the gap, sized in dollars."
 
-**[1:02 — The action]** *Open the drawer: brief + from→to move; tap to fire.*
-> "It writes the move — pull budget from the cooling market, push it into the heating one — drafts the brief, and pings the buyer in Slack. One tap."
+**[1:26 — The action]** *Open the drawer: brief + from→to move; tap to fire.*
+> "It writes the reallocation — pull budget from the cooling market, push it into the heating one — drafts a strategist brief from the real numbers, and pings the named buyer in Slack through a tiny Cloudflare Worker, with an email draft as the zero-infra fallback. The brief is templated by default so the demo can't break; an LLM upgrade through the same Worker is optional."
 
-**[1:12 — Close]** *Cut back to the map / Slack confirmation.*
-> "The weather doesn't arrive for three days. We've already acted. That's Bellwether."
+**[1:40 — Plugging in real data + close]** *Cut back to the map / Slack confirmation.*
+> "Everything here runs on real or realistic data: the forecast is live, the elasticities are regressed on real history. To go to production you swap two files — the demand proxy becomes the brand's own point-of-sale data so the r² is theirs, and the sample media plan becomes their real flight. The forecast and the math don't change. The weather doesn't arrive for three days. We've already acted. That's Bellwether."
 
 **Recording tips**
 - Record at the app's native size; the Riso palette compresses well. Keep the cursor movements slow and deliberate.
 - Pre-pick the region + day with the strongest front so the sweep and the invert both land.
 - If live forecast is flaky on the day, the GitHub Action's cached `forecast_snapshot.json` keeps the map populated — record against that as a safety net.
 - Capture the Slack message actually arriving (or the prefilled email draft) — the brief says *show it working*.
+- The technical lines (especially [0:22] and [0:58]) are the densest — if you're tight on time, those are the ones to trim to a single sentence. Keep the data-source names (Open-Meteo, ERA5, Wikipedia pageviews) audible; they're what earns the signal-quality score.
+
+---
+
+## Architecture & data sources (presenter reference)
+
+Keep this handy for Q&A; it's the precise version of what the script says.
+
+| Concern | What it is | When it runs |
+|---|---|---|
+| **Live forecast** | Open-Meteo Forecast API — keyless, CORS-open, all 117 cities batched in one request (`daily=temperature_2m_max`, 7 days). | **Runtime**, in the browser |
+| **Historical weather** | ERA5 reanalysis via Open-Meteo Archive API — used to build per-market climatological normals and the calibration's reference temperature series. | **Build time** (`calibrate.py`) |
+| **Demand proxy** | Wikimedia Pageviews API for a per-category proxy article (e.g. *Ice cream*). Server-side because it requires a `User-Agent` header browsers can't set. | **Build time** (`calibrate.py`) |
+| **Calibration (the ML)** | Per-category linear regression of de-seasonalised, de-trended demand residual on temperature anomaly → `elasticity` + `r²`, written to `data/coefficients.json`. | **Build time**, in a GitHub Action |
+| **Demand model** | `anomaly = forecast − normal`; `demand_delta = elasticity × anomaly`; plus a z-score vs. each market's own σ ("surprise"). | Runtime (`model.js`) |
+| **Map** | Inverse-distance-weighted grid → `d3-contour` isobands over a `d3-geoMercator` TopoJSON basemap. | Runtime (`interpolate.js`, `isobars.js`) |
+| **Diagnosis** | `opportunity_score = demand_delta × (target_weight − current_weight) × metro_value`, ranked. | Runtime (`diagnose.js`) |
+| **Action** | Template-driven brief (deterministic) + Slack push via optional Cloudflare Worker, `mailto:` fallback. | Runtime (`action.js`, `worker/slack-proxy.js`) |
+| **The loop** | GitHub Actions: `build-data.yml` regenerates coefficients/normals; `run.yml` cron-refreshes the forecast snapshot and can post the top alert to Slack — unattended. | Scheduled (CI) |
+
+**What's AI / ML, stated honestly:** the intelligence is a *calibrated statistical model*, not a black box — supervised linear regression for the elasticities, anomaly detection against each market's own variance, IDW spatial interpolation, and a ranked scoring step for the gap. The only *generative* AI is the optional LLM brief upgrade routed through the Cloudflare Worker; the default brief is templated so the demo never depends on a model being reachable.
+
+**Synthetic vs. real data in the PoC:** the *forecast* (live) and the *historical weather + demand-proxy calibration* are real. The *brand* is fictional — `media_plan.json` (spend weights + named buyers) and the 16 product lines in `categories.json` are illustrative. Going to production is a two-file swap: replace the Wikipedia demand proxy with the brand's point-of-sale / sell-through data (the regression is identical; the r² becomes theirs and can be computed per-market instead of national), and replace the sample media plan with their actual flight export. The forecast path and all the math are unchanged.
 
 ---
 
