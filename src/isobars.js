@@ -54,6 +54,13 @@ export class IsobarMap {
 
     this.defs = this.svg.append("defs");
 
+    // Clip the basemap outlines to the locked region's view, so unrelated
+    // continents (e.g. North America's coastline when we've locked onto Europe)
+    // don't bleed in as stray outline on the empty side of the frame.
+    this.regionClipRect = this.defs.append("clipPath")
+      .attr("id", "regionClip").append("rect")
+      .attr("x", 0).attr("y", 0).attr("width", this.W).attr("height", this.H);
+
     // layers, bottom → top. The demand field is the *background*; outlines and
     // the graticule are drawn ON TOP of it so they're always legible (otherwise
     // the 0.9-opacity fills bury them and you see no map at all).
@@ -119,6 +126,25 @@ export class IsobarMap {
     // clamp absurd zoom when cities are nearly coincident
     if (this.projection.scale() > 4000) this.projection.scale(4000);
     this.geoPath = d3.geoPath(this.projection);
+
+    // Size the basemap clip to the region's projected bounding box + margin.
+    // This keeps coastlines/borders to the region in view and drops any
+    // unrelated landmass that the world mesh would otherwise paint in the
+    // empty margin (the "phantom US on the left" when locked onto Europe).
+    const xs = [], ys = [];
+    for (const m of cities) {
+      const xy = this.projection([m.lon, m.lat]);
+      if (xy) { xs.push(xy[0]); ys.push(xy[1]); }
+    }
+    const mx = 0.1 * this.W, my = 0.1 * this.H;
+    let x0 = Math.max(0, Math.min(...xs) - mx);
+    let y0 = Math.max(0, Math.min(...ys) - my);
+    let x1 = Math.min(this.W, Math.max(...xs) + mx);
+    let y1 = Math.min(this.H, Math.max(...ys) + my);
+    if (!(x1 > x0 && y1 > y0)) { x0 = 0; y0 = 0; x1 = this.W; y1 = this.H; } // guard
+    this.regionClipRect
+      .attr("x", x0).attr("y", y0).attr("width", x1 - x0).attr("height", y1 - y0);
+    this.gBase.attr("clip-path", "url(#regionClip)");
 
     // graticule (drawn over the field, so always visible)
     this.gGrat.selectAll("path").data([this.graticule()]).join("path")
