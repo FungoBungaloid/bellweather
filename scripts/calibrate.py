@@ -172,6 +172,20 @@ def regress(x, y):
     return float(slope), float(r2)
 
 
+def detrend(t, s):
+    """Remove a linear time trend from series `s` sampled at ordinal days `t`.
+
+    Day-of-year deseasonalising strips the *seasonal* cycle but NOT the slow
+    multi-year drift. Wikipedia traffic broadly declines year-on-year while
+    temperatures warm — a shared monotonic trend that manufactures a spurious
+    NEGATIVE correlation for every article regardless of its true weather
+    sensitivity (the symptom: all elasticities negative, r²≈0). Regressing on
+    the detrended residual isolates the genuine weather-driven covariation."""
+    s = np.asarray(s, float)
+    a, b = np.polyfit(t, s, 1)
+    return s - (a * t + b)
+
+
 def reference_anomaly(driver, start, end):
     """Average deseasonalised weather anomaly across the reference basket.
     Computed ONCE and reused for every (temperature-driven) category."""
@@ -215,9 +229,10 @@ def calibrate_category(cat_id, meta, temp_anom):
         if len(common) < 200:
             print(f"      only {len(common)} overlapping days, skip")
             continue
-        x = [temp_anom[d] for d in common]
+        t_ord = np.array([d.toordinal() for d in common], float)
+        x = detrend(t_ord, [temp_anom[d] for d in common])
         # express demand residual in % (resid of log ~ fractional change) * 100
-        y = [pv_resid[d] * 100 for d in common]
+        y = detrend(t_ord, [pv_resid[d] * 100 for d in common])
         slope, r2 = regress(x, y)
         print(f"      elasticity={slope:+.2f} %/°C   r2={r2:.3f}   n={len(common)}")
         cand = (article, slope, r2, x, y)
